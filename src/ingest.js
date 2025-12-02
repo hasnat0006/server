@@ -1,81 +1,75 @@
-import { createRequire } from 'node:module';
+import { PDFParser } from 'pdf2json';
 import pool from './Database/db.js';
 import { chunkText, normalize, sha256 } from './util.js';
 
-const require = createRequire(import.meta.url);
-const domMatrixPolyfill = require('dommatrix');
-if (typeof globalThis.DOMMatrix === 'undefined') {
-  globalThis.DOMMatrix = domMatrixPolyfill.default ?? domMatrixPolyfill;
-}
-
-if (typeof globalThis.ImageData === 'undefined') {
-  class NodeImageData {
-    constructor(arg1, arg2, arg3) {
-      if (typeof arg1 === 'number') {
-        const width = arg1;
-        const height = typeof arg2 === 'number' ? arg2 : 0;
-        if (width <= 0 || height <= 0) {
-          throw new TypeError('ImageData width/height must be positive numbers');
-        }
-        this.width = width;
-        this.height = height;
-        this.data = new Uint8ClampedArray(width * height * 4);
-      } else {
-        if (typeof arg2 !== 'number' || typeof arg3 !== 'number') {
-          throw new TypeError('ImageData width/height must be provided');
-        }
-        this.width = arg2;
-        this.height = arg3;
-        const array = arg1 instanceof Uint8ClampedArray
-          ? arg1
-          : new Uint8ClampedArray(arg1);
-        if (array.length !== this.width * this.height * 4) {
-          throw new RangeError('ImageData buffer length mismatch');
-        }
-        this.data = array;
-      }
-    }
-  }
-  globalThis.ImageData = NodeImageData;
-}
-
-if (typeof globalThis.Path2D === 'undefined') {
-  class NodePath2D {
-    constructor(path) {
-      this._path = path;
-    }
-
-    addPath() {}
-    moveTo() {}
-    closePath() {}
-    lineTo() {}
-    bezierCurveTo() {}
-    quadraticCurveTo() {}
-    arc() {}
-    arcTo() {}
-    rect() {}
-  }
-  globalThis.Path2D = NodePath2D;
-}
-
-const pdfParse = require('pdf-parse');
-
 export async function extractTextFromPdf(buffer) {
-  const { text } = await pdfParse(buffer);
-  console.log(`Extracted text length: ${text.length} characters`);
-  return text;
+  return new Promise((resolve, reject) => {
+    const pdfParser = new PDFParser();
+
+    const timeout = setTimeout(() => {
+      reject(new Error('PDF parsing timed out after 60 seconds'));
+    }, 60000);
+
+    pdfParser.on('pdfParser_dataError', errData => {
+      clearTimeout(timeout);
+      console.error('PDF Parser Error:', errData.parserError);
+      reject(errData.parserError);
+    });
+
+    pdfParser.on('pdfParser_dataReady', pdfData => {
+      clearTimeout(timeout);
+      console.log('PDF Parser Data Ready');
+      try {
+        console.log('PDF Data Keys:', Object.keys(pdfData));
+        let text = '';
+
+        // Extract text from all pages
+        if (pdfData && pdfData.Pages) {
+          pdfData.Pages.forEach(page => {
+            if (page.Texts) {
+              page.Texts.forEach(textItem => {
+                if (textItem.R) {
+                  textItem.R.forEach(r => {
+                    if (r.T) {
+                      text += decodeURIComponent(r.T) + ' ';
+                    }
+                  });
+                }
+              });
+              text += '\n';
+            }
+          });
+        }
+
+        console.log(`Extracted text length: ${text.length} characters`);
+        console.log('--- FULL EXTRACTED TEXT START ---');
+        console.log(text);
+        console.log('--- FULL EXTRACTED TEXT END ---');
+        console.log(`Extracted text preview: ${text.slice(0, 200)}...`);
+        resolve(text);
+      } catch (e) {
+        console.error('Error processing PDF data:', e);
+        reject(e);
+      }
+    });
+
+    console.log('Starting parseBuffer...');
+    pdfParser.parseBuffer(buffer);
+  });
 }
+
 
 export async function ingestDocument({ buffer, filename }) {
   try {
     console.log(`Starting PDF extraction for: ${filename}`);
     const rawText = await extractTextFromPdf(buffer);
     console.log(`Extracted ${rawText.length} characters from PDF`);
-    
+
     const normalizedText = normalize(rawText);
     console.log(`Normalized text length: ${normalizedText.length} characters`);
-    
+
     const docHash = sha256(normalizedText);
+    console.log(`Computed document hash: ${docHash}`);
 
     const existing = await pool.query(
       'SELECT id FROM documents WHERE doc_hash = $1',
