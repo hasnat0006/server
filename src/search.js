@@ -11,11 +11,17 @@ export async function searchDocument({ buffer }) {
 
   const docHash = sha256(normalized);
   const existing = await pool.query(
-    'SELECT id FROM documents WHERE doc_hash = $1',
+    'SELECT id, filename FROM documents WHERE doc_hash = $1',
     [docHash]
   );
   if (existing.rows.length > 0) {
-    return { matchType: 'document', docId: existing.rows[0].id, score: 1.0 };
+    return { 
+      matchType: 'document', 
+      docId: existing.rows[0].id, 
+      filename: existing.rows[0].filename,
+      score: 1.0,
+      explanation: 'This document is an exact duplicate (100% match). The entire content matches byte-for-byte.'
+    };
   }
 
   const chunks = chunkText(normalized);
@@ -23,28 +29,65 @@ export async function searchDocument({ buffer }) {
     return { matchType: 'fuzzy_trigram', results: [] };
   }
 
-  const chunkHashes = chunks.map((chunk) => sha256(chunk));
+  const chunkHashes = chunks.map((chunk, index) => ({ hash: sha256(chunk), text: chunk, index }));
+  
+  // Get exact chunk matches with details
   const exactMatchRows = await pool.query(
-    'SELECT document_id, COUNT(*) AS matched_chunks FROM chunks WHERE chunk_hash = ANY($1::text[]) GROUP BY document_id',
-    [chunkHashes]
+    `SELECT c.document_id, c.chunk_index, c.chunk_text, c.chunk_hash, d.filename 
+     FROM chunks c 
+     JOIN documents d ON c.document_id = d.id 
+     WHERE c.chunk_hash = ANY($1::text[])`,
+    [chunkHashes.map(ch => ch.hash)]
   );
 
   if (exactMatchRows.rows.length > 0) {
-    const docIds = exactMatchRows.rows.map((row) => row.document_id);
+    // Group by document
+    const docMatches = new Map();
+    
+    for (const row of exactMatchRows.rows) {
+      const docId = row.document_id;
+      if (!docMatches.has(docId)) {
+        docMatches.set(docId, {
+          docId,
+          filename: row.filename,
+          matches: []
+        });
+      }
+      
+      // Find which uploaded chunk matched
+      const uploadedChunk = chunkHashes.find(ch => ch.hash === row.chunk_hash);
+      
+      docMatches.get(docId).matches.push({
+        uploadedChunkIndex: uploadedChunk?.index ?? -1,
+        uploadedChunkText: uploadedChunk?.text ?? '',
+        matchedChunkIndex: row.chunk_index,
+        matchedChunkText: row.chunk_text,
+        matchType: 'exact',
+        similarity: 1.0
+      });
+    }
+
+    // Get total chunk counts for each document
+    const docIds = Array.from(docMatches.keys());
     const chunkCountsRows = await pool.query(
       'SELECT document_id, COUNT(*) AS chunk_count FROM chunks WHERE document_id = ANY($1::int[]) GROUP BY document_id',
       [docIds]
     );
-
     const chunkCountMap = new Map(chunkCountsRows.rows.map((row) => [row.document_id, Number(row.chunk_count)]));
 
-    const results = exactMatchRows.rows
-      .map((row) => {
-        const matchedChunks = Number(row.matched_chunks);
-        const docId = row.document_id;
-        const chunkCount = chunkCountMap.get(docId) ?? 0;
-        const score = chunkHashes.length ? matchedChunks / chunkHashes.length : 0;
-        return { docId, matchedChunks, chunkCount, score };
+    const results = Array.from(docMatches.values())
+      .map((doc) => {
+        const chunkCount = chunkCountMap.get(doc.docId) ?? 0;
+        const score = chunks.length ? doc.matches.length / chunks.length : 0;
+        return { 
+          docId: doc.docId,
+          filename: doc.filename,
+          matchedChunks: doc.matches.length,
+          chunkCount,
+          score,
+          matches: doc.matches.slice(0, 10), // Return top 10 matches
+          totalMatches: doc.matches.length
+        };
       })
       .sort((a, b) => b.score - a.score);
 
@@ -52,26 +95,52 @@ export async function searchDocument({ buffer }) {
   }
 
   const fuzzyMap = new Map();
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
     const fuzzyRows = await pool.query(
-      'SELECT document_id, similarity(chunk_text, $1) AS sim FROM chunks WHERE chunk_text % $1 ORDER BY sim DESC LIMIT 5',
+      `SELECT c.document_id, c.chunk_index, c.chunk_text, d.filename, similarity(c.chunk_text, $1) AS sim 
+       FROM chunks c 
+       JOIN documents d ON c.document_id = d.id 
+       WHERE c.chunk_text % $1 
+       ORDER BY sim DESC 
+       LIMIT 3`,
       [chunk]
     );
+    
     for (const row of fuzzyRows.rows) {
       const docId = row.document_id;
       const sim = Number(row.sim ?? 0);
-      const entry = fuzzyMap.get(docId) ?? { matchedChunks: 0, similarity: 0 };
-      entry.matchedChunks += 1;
-      entry.similarity += sim;
-      fuzzyMap.set(docId, entry);
+      
+      if (!fuzzyMap.has(docId)) {
+        fuzzyMap.set(docId, {
+          docId,
+          filename: row.filename,
+          matches: [],
+          totalSimilarity: 0
+        });
+      }
+      
+      const entry = fuzzyMap.get(docId);
+      entry.matches.push({
+        uploadedChunkIndex: i,
+        uploadedChunkText: chunk.substring(0, 200) + '...',
+        matchedChunkIndex: row.chunk_index,
+        matchedChunkText: row.chunk_text.substring(0, 200) + '...',
+        matchType: 'fuzzy',
+        similarity: sim
+      });
+      entry.totalSimilarity += sim;
     }
   }
 
-  const fuzzyResults = Array.from(fuzzyMap.entries())
-    .map(([docId, entry]) => ({
-      docId,
-      matchedChunks: entry.matchedChunks,
-      score: entry.similarity / entry.matchedChunks
+  const fuzzyResults = Array.from(fuzzyMap.values())
+    .map((doc) => ({
+      docId: doc.docId,
+      filename: doc.filename,
+      matchedChunks: doc.matches.length,
+      score: doc.matches.length ? doc.totalSimilarity / doc.matches.length : 0,
+      matches: doc.matches.slice(0, 10), // Return top 10 fuzzy matches
+      totalMatches: doc.matches.length
     }))
     .sort((a, b) => b.score - a.score);
 

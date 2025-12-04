@@ -245,6 +245,119 @@
             font-weight: 600;
             color: #667eea;
         }
+
+        .match-details-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .match-details-btn:hover {
+            background: #5568d3;
+        }
+
+        .matched-sections {
+            margin-top: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .section-match {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .section-match.exact {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .section-match.fuzzy {
+            border-left-color: #ffc107;
+            background: #fffef5;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .match-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .match-badge.exact {
+            background: #dc3545;
+            color: white;
+        }
+
+        .match-badge.fuzzy {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .text-preview {
+            background: white;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 8px 0;
+            font-size: 0.9em;
+            line-height: 1.6;
+            border: 1px solid #e0e0e0;
+        }
+
+        .text-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+        }
+
+        .similarity-bar {
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .similarity-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745 0%, #ffc107 50%, #dc3545 100%);
+            transition: width 0.3s;
+        }
+
+        .collapse-btn {
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 0.9em;
+            padding: 5px 10px;
+            text-decoration: underline;
+        }
+
+        .collapse-btn:hover {
+            color: #5568d3;
+        }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -485,7 +598,16 @@
             if (data.matchType === 'document') {
                 resultType = 'error';
                 title = '⚠️ Exact Match Found!';
-                details = `This document exactly matches document ID ${data.docId} in the database.<br>Similarity: ${(data.score * 100).toFixed(0)}%`;
+                details = `
+                    <div style="margin-bottom: 15px;">
+                        <strong>Document:</strong> ${data.filename || 'Unknown'}<br>
+                        <strong>Document ID:</strong> ${data.docId}<br>
+                        <strong>Similarity:</strong> ${(data.score * 100).toFixed(0)}%
+                    </div>
+                    <div style="padding: 12px; background: #fff3cd; border-radius: 5px; border-left: 4px solid #ffc107;">
+                        ${data.explanation || 'This is a complete duplicate of an existing document.'}
+                    </div>
+                `;
             } else if (data.matchType === 'exact_chunks') {
                 if (data.results.length > 0) {
                     const topMatch = data.results[0];
@@ -500,13 +622,19 @@
                     }
                     
                     details = `<div class="match-list">`;
-                    data.results.slice(0, 5).forEach(match => {
+                    data.results.forEach((match, idx) => {
                         const percent = (match.score * 100).toFixed(1);
+                        const hasDetails = match.matches && match.matches.length > 0;
                         details += `
                             <div class="match-item">
+                                <div><strong>Document:</strong> ${match.filename || 'Unknown'}</div>
                                 <div><strong>Document ID:</strong> ${match.docId}</div>
-                                <div><strong>Matched Chunks:</strong> ${match.matchedChunks} / ${match.chunkCount}</div>
+                                <div><strong>Matched Sections:</strong> ${match.matchedChunks} ${match.chunkCount ? '/ ' + match.chunkCount : ''}</div>
                                 <div class="match-score">Similarity: ${percent}%</div>
+                                ${hasDetails ? `<button class="match-details-btn" onclick="toggleMatchDetails(${idx}, 'exact')">View Matched Sections</button>` : ''}
+                                <div id="match-details-exact-${idx}" class="matched-sections hidden">
+                                    ${renderMatchedSections(match.matches)}
+                                </div>
                             </div>
                         `;
                     });
@@ -521,13 +649,19 @@
                     resultType = 'info';
                     title = 'Fuzzy Matches Found';
                     details = `<div class="match-list">`;
-                    data.results.slice(0, 5).forEach(match => {
+                    data.results.forEach((match, idx) => {
                         const percent = (match.score * 100).toFixed(1);
+                        const hasDetails = match.matches && match.matches.length > 0;
                         details += `
                             <div class="match-item">
+                                <div><strong>Document:</strong> ${match.filename || 'Unknown'}</div>
                                 <div><strong>Document ID:</strong> ${match.docId}</div>
-                                <div><strong>Matched Chunks:</strong> ${match.matchedChunks}</div>
-                                <div class="match-score">Similarity: ${percent}%</div>
+                                <div><strong>Similar Sections:</strong> ${match.matchedChunks}</div>
+                                <div class="match-score">Average Similarity: ${percent}%</div>
+                                ${hasDetails ? `<button class="match-details-btn" onclick="toggleMatchDetails(${idx}, 'fuzzy')">View Similar Sections</button>` : ''}
+                                <div id="match-details-fuzzy-${idx}" class="matched-sections hidden">
+                                    ${renderMatchedSections(match.matches)}
+                                </div>
                             </div>
                         `;
                     });
@@ -540,6 +674,74 @@
             }
 
             showResult(checkResult, resultType, title, details);
+        }
+
+        function renderMatchedSections(matches) {
+            if (!matches || matches.length === 0) {
+                return '<p style="padding: 10px; color: #666;">No detailed match information available.</p>';
+            }
+
+            let html = '';
+            matches.forEach((match, idx) => {
+                const matchType = match.matchType || 'exact';
+                const similarity = ((match.similarity || 1) * 100).toFixed(1);
+                
+                html += `
+                    <div class="section-match ${matchType}">
+                        <div class="section-header">
+                            <span>Match ${idx + 1}</span>
+                            <span class="match-badge ${matchType}">${matchType === 'exact' ? 'Exact Match' : similarity + '% Similar'}</span>
+                        </div>
+                        
+                        ${matchType === 'fuzzy' ? `
+                            <div class="similarity-bar">
+                                <div class="similarity-fill" style="width: ${similarity}%"></div>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="text-label">📄 Your Document (Section ${match.uploadedChunkIndex + 1}):</div>
+                        <div class="text-preview">${escapeHtml(match.uploadedChunkText || 'N/A')}</div>
+                        
+                        <div class="text-label">📋 Matched Document (Section ${match.matchedChunkIndex + 1}):</div>
+                        <div class="text-preview">${escapeHtml(match.matchedChunkText || 'N/A')}</div>
+                        
+                        <div style="margin-top: 10px; padding: 10px; background: #e8f4fd; border-radius: 5px; font-size: 0.9em;">
+                            <strong>Why it matched:</strong> ${getMatchExplanation(matchType, similarity)}
+                        </div>
+                    </div>
+                `;
+            });
+
+            return html;
+        }
+
+        function getMatchExplanation(matchType, similarity) {
+            if (matchType === 'exact') {
+                return 'These sections are identical, indicating direct copying or exact duplication of content.';
+            } else {
+                if (similarity > 80) {
+                    return 'These sections are very similar, with minor paraphrasing or word changes. This suggests substantial content reuse.';
+                } else if (similarity > 60) {
+                    return 'These sections share significant similar content and structure, possibly with some paraphrasing or rewording.';
+                } else if (similarity > 40) {
+                    return 'These sections have moderate similarity, sharing some common phrases or concepts.';
+                } else {
+                    return 'These sections have low similarity but share some common words or phrases.';
+                }
+            }
+        }
+
+        function toggleMatchDetails(index, type) {
+            const element = document.getElementById(`match-details-${type}-${index}`);
+            if (element) {
+                element.classList.toggle('hidden');
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>
