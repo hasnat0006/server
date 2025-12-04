@@ -1,4 +1,4 @@
-import { PDFParser } from 'pdf2json';
+import PDFParser from 'pdf2json';
 import pool from './Database/db.js';
 import { chunkText, normalize, sha256 } from './util.js';
 

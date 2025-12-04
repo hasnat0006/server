@@ -1,7 +1,12 @@
 import express from 'express';
 import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ingestDocument } from './ingest.js';
 import { searchDocument } from './search.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const upload = multer({
@@ -18,6 +23,14 @@ process.on('unhandledRejection', (reason) => {
 });
 
 app.use(express.json());
+
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Serve the upload page at root
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'upload.html'));
+});
 
 app.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
@@ -53,6 +66,14 @@ app.post('/check', upload.single('file'), async (req, res) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`doc-checker listening on port ${port}`);
+});
+
+// Keep the process alive
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+  });
 });
