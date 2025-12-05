@@ -25,7 +25,7 @@
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
+            max-width: 900px;
             width: 100%;
             padding: 40px;
         }
@@ -46,31 +46,34 @@
 
         .tabs {
             display: flex;
-            gap: 10px;
+            gap: 5px;
             margin-bottom: 30px;
             border-bottom: 2px solid #eee;
         }
 
         .tab {
             flex: 1;
-            padding: 12px;
+            padding: 14px 10px;
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 1em;
+            font-size: 0.95em;
             color: #666;
             transition: all 0.3s;
             border-bottom: 3px solid transparent;
+            white-space: nowrap;
         }
 
         .tab.active {
             color: #667eea;
             border-bottom-color: #667eea;
             font-weight: 600;
+            background: #f8f9ff;
         }
 
         .tab:hover {
             color: #667eea;
+            background: #f8f9ff;
         }
 
         .tab-content {
@@ -94,6 +97,33 @@
         .upload-area.dragover {
             border-color: #667eea;
             background: #f0f4ff;
+        }
+
+        #academicArea {
+            border-color: #0066cc;
+        }
+
+        #academicArea.dragover {
+            border-color: #0066cc;
+            background: #e7f3ff;
+        }
+
+        #universityArea {
+            border-color: #28a745;
+        }
+
+        #universityArea.dragover {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+
+        #companyArea {
+            border-color: #17a2b8;
+        }
+
+        #companyArea.dragover {
+            border-color: #17a2b8;
+            background: #d1ecf1;
         }
 
         .upload-icon {
@@ -162,6 +192,23 @@
             background: #ccc;
             cursor: not-allowed;
             transform: none;
+        }
+
+        #academicBtn {
+            background: linear-gradient(135deg, #0066cc 0%, #00a8ff 100%);
+        }
+
+        #academicBtn:hover:not(:disabled) {
+            box-shadow: 0 10px 20px rgba(0, 102, 204, 0.3);
+        }
+
+        #verificationBtn {
+            background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+            color: #000;
+        }
+
+        #verificationBtn:hover:not(:disabled) {
+            box-shadow: 0 10px 20px rgba(255, 193, 7, 0.3);
         }
 
         .result {
@@ -358,110 +405,622 @@
         .hidden {
             display: none;
         }
+
+        /* XAI Analysis Styles */
+        .xai-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 2px solid #667eea;
+        }
+
+        .xai-header {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .classification-badge {
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            display: inline-block;
+            margin: 10px 0;
+        }
+
+        .classification-badge.critical {
+            background: #dc3545;
+            color: white;
+        }
+
+        .classification-badge.high {
+            background: #fd7e14;
+            color: white;
+        }
+
+        .classification-badge.medium {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .classification-badge.low {
+            background: #28a745;
+            color: white;
+        }
+
+        .classification-badge.none {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .feature-chart {
+            margin: 20px 0;
+        }
+
+        .feature-bar {
+            margin: 10px 0;
+        }
+
+        .feature-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        .feature-progress {
+            height: 25px;
+            background: #e9ecef;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .feature-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            transition: width 0.6s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+
+        .xai-summary {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+            line-height: 1.6;
+        }
+
+        .xai-reasons {
+            margin-top: 15px;
+        }
+
+        .reason-item {
+            background: white;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .reason-item.critical {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .reason-item.high {
+            border-left-color: #fd7e14;
+            background: #fff8f5;
+        }
+
+        .reason-item.medium {
+            border-left-color: #ffc107;
+            background: #fffef5;
+        }
+
+        .reason-header {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .reason-description {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .confidence-meter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .confidence-label {
+            font-weight: 600;
+            min-width: 100px;
+        }
+
+        .confidence-bar {
+            flex: 1;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #17a2b8);
+            transition: width 0.6s ease;
+        }
+
+        .confidence-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .recommendations {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .recommendations h4 {
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+
+        .recommendations ul {
+            margin-left: 20px;
+        }
+
+        .recommendations li {
+            margin: 5px 0;
+            color: #333;
+        }
+
+        .alerts {
+            margin-top: 15px;
+        }
+
+        .alert-item {
+            padding: 10px 15px;
+            margin: 8px 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-item.critical {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .alert-item.high {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+
+        .alert-item.medium {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
+        .document-type-badge {
+            background: #667eea;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        /* Threshold Status Styles */
+        .threshold-indicator {
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 3px solid;
+            font-size: 1.1em;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .threshold-indicator.acceptable {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+
+        .threshold-indicator.review {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+
+        .threshold-indicator.reject {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+
+        .threshold-details {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        .threshold-item {
+            text-align: center;
+        }
+
+        .threshold-label {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .threshold-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .forgery-alert {
+            background: #f8d7da;
+            border: 3px solid #dc3545;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .forgery-header {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #721c24;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .forgery-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .forgery-issue {
+            font-weight: 600;
+            color: #dc3545;
+            margin-bottom: 8px;
+            font-size: 1.05em;
+        }
+
+        .forgery-explanation {
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .forgery-recommendation {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            color: #856404;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📄 Document Checker</h1>
-        <p class="subtitle">Upload or check PDF documents for plagiarism</p>
+        <h1>📄 Document Verification System</h1>
+        <p class="subtitle">XAI-Powered Document Analysis & Authentication</p>
 
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('upload')">Upload Document</button>
-            <button class="tab" onclick="switchTab('check')">Check Document</button>
+            <button class="tab active" onclick="switchTab('academic')">📄 Academic Papers</button>
+            <button class="tab" onclick="switchTab('university')">🎓 University Upload</button>
+            <button class="tab" onclick="switchTab('company')">🏢 Company Verify</button>
         </div>
 
-        <!-- Upload Tab -->
-        <div id="upload-tab" class="tab-content active">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">📤</div>
-                <div class="upload-text">Drag & Drop PDF here</div>
-                <div class="upload-hint">or click to browse</div>
-                <input type="file" id="uploadFileInput" accept=".pdf" />
+        <!-- Academic Check Tab -->
+        <div id="academic-tab" class="tab-content active">
+            <div style="background: #e7f3ff; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #0066cc;">
+                <h3 style="margin: 0 0 10px 0; color: #0066cc;">📚 Academic Paper Plagiarism Checker</h3>
+                <p style="margin: 0; color: #333; font-size: 0.9em; line-height: 1.6;">
+                    <strong>Workflow:</strong> Upload your research paper, journal, or thesis for plagiarism analysis. 
+                    The XAI system will check similarity against existing documents.<br>
+                    • <strong style="color: #28a745;">0-30% similarity:</strong> ✅ Acceptable - Upload allowed<br>
+                    • <strong style="color: #ffc107;">30-40% similarity:</strong> ⚠️ Review required - Upload allowed with warning<br>
+                    • <strong style="color: #dc3545;">&gt;40% similarity:</strong> ❌ Plagiarism detected - Upload blocked
+                </p>
+            </div>
+
+            <div class="upload-area" id="academicArea">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">Drag & Drop Academic Document</div>
+                <div class="upload-hint">Papers, Journals, Thesis, Articles</div>
+                <input type="file" id="academicFileInput" accept=".pdf" />
             </div>
             
-            <div class="file-info" id="uploadFileInfo">
-                <div class="file-name" id="uploadFileName"></div>
-                <div class="file-size" id="uploadFileSize"></div>
+            <div class="file-info" id="academicFileInfo">
+                <div class="file-name" id="academicFileName"></div>
+                <div class="file-size" id="academicFileSize"></div>
             </div>
 
-            <button class="btn" id="uploadBtn" disabled>Upload to Database</button>
+            <button class="btn" id="academicBtn" disabled>
+                🔍 Check Plagiarism (Step 1)
+            </button>
 
-            <div class="loading" id="uploadLoading">
+            <button class="btn" id="academicUploadBtn" disabled style="display: none; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); margin-top: 10px;">
+                ✅ Upload to Database (Step 2)
+            </button>
+
+            <div class="loading" id="academicLoading">
                 <div class="spinner"></div>
-                <div>Uploading and processing...</div>
+                <div>Analyzing document with XAI...</div>
             </div>
 
-            <div class="result" id="uploadResult"></div>
+            <div class="loading" id="academicUploadLoading" style="display: none;">
+                <div class="spinner"></div>
+                <div>Uploading to database...</div>
+            </div>
+
+            <div class="result" id="academicResult"></div>
+            <div class="result" id="academicUploadResult"></div>
         </div>
 
-        <!-- Check Tab -->
-        <div id="check-tab" class="tab-content">
-            <div class="upload-area" id="checkArea">
-                <div class="upload-icon">🔍</div>
-                <div class="upload-text">Drag & Drop PDF to check</div>
-                <div class="upload-hint">or click to browse</div>
-                <input type="file" id="checkFileInput" accept=".pdf" />
+        <!-- University Certificate Upload Tab -->
+        <div id="university-tab" class="tab-content">
+            <div style="background: #d4edda; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+                <h3 style="margin: 0 0 10px 0; color: #155724;">🎓 University Certificate Upload</h3>
+                <p style="margin: 0; color: #333; font-size: 0.9em; line-height: 1.6;">
+                    <strong>For Universities & Educational Institutions:</strong> Upload authentic certificates, diplomas, and degrees 
+                    to the trusted database. These will serve as the authentic source for verification.<br>
+                    • Upload graduate certificates with student details<br>
+                    • Store authentic documents for future verification<br>
+                    • Maintain secure record of issued certificates
+                </p>
+            </div>
+
+            <div class="upload-area" id="universityArea" style="border-color: #28a745;">
+                <div class="upload-icon">🎓</div>
+                <div class="upload-text">Upload Authentic Certificate</div>
+                <div class="upload-hint">Certificates, Diplomas, Degrees</div>
+                <input type="file" id="universityFileInput" accept=".pdf" />
             </div>
             
-            <div class="file-info" id="checkFileInfo">
-                <div class="file-name" id="checkFileName"></div>
-                <div class="file-size" id="checkFileSize"></div>
+            <div class="file-info" id="universityFileInfo">
+                <div class="file-name" id="universityFileName"></div>
+                <div class="file-size" id="universityFileSize"></div>
             </div>
 
-            <button class="btn" id="checkBtn" disabled>Check for Matches</button>
+            <!-- University Metadata Form -->
+            <div id="universityForm" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #333;">Certificate Details</h4>
+                <div style="display: grid; gap: 15px;">
+                    <div>
+                        <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #555;">University Name *</label>
+                        <input type="text" id="universityName" placeholder="e.g., Harvard University" 
+                               style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 0.95em;" required />
+                    </div>
+                    <div>
+                        <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #555;">Student Name *</label>
+                        <input type="text" id="studentName" placeholder="e.g., John Smith" 
+                               style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 0.95em;" required />
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #555;">Certificate Type *</label>
+                            <select id="certificateType" style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 0.95em;" required>
+                                <option value="">Select Type</option>
+                                <option value="Bachelor's Degree">Bachelor's Degree</option>
+                                <option value="Master's Degree">Master's Degree</option>
+                                <option value="PhD">PhD</option>
+                                <option value="Diploma">Diploma</option>
+                                <option value="Certificate">Certificate</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #555;">Issue Date *</label>
+                            <input type="date" id="issueDate" 
+                                   style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 0.95em;" required />
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-            <div class="loading" id="checkLoading">
+            <button class="btn" id="universityUploadBtn" disabled style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                ✅ Upload to Trusted Database
+            </button>
+
+            <div class="loading" id="universityLoading">
                 <div class="spinner"></div>
-                <div>Checking document...</div>
+                <div>Uploading certificate to trusted database...</div>
             </div>
 
-            <div class="result" id="checkResult"></div>
+            <div class="result" id="universityResult"></div>
+        </div>
+
+        <!-- Company Certificate Verification Tab -->
+        <div id="company-tab" class="tab-content">
+            <div style="background: #d1ecf1; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #17a2b8;">
+                <h3 style="margin: 0 0 10px 0; color: #0c5460;">🏢 Company Certificate Verification</h3>
+                <p style="margin: 0; color: #333; font-size: 0.9em; line-height: 1.6;">
+                    <strong>For Employers & Organizations:</strong> Verify the authenticity of certificates submitted by job applicants. 
+                    The XAI system will check if the certificate matches authentic university records.<br>
+                    • Check if certificate exists in trusted database<br>
+                    • Detect forgeries, tampering, or modifications<br>
+                    • Get detailed XAI analysis of authenticity
+                </p>
+            </div>
+
+            <div class="upload-area" id="companyArea" style="border-color: #17a2b8;">
+                <div class="upload-icon">🏢</div>
+                <div class="upload-text">Upload Certificate to Verify</div>
+                <div class="upload-hint">Applicant's Certificate</div>
+                <input type="file" id="companyFileInput" accept=".pdf" />
+            </div>
+            
+            <div class="file-info" id="companyFileInfo">
+                <div class="file-name" id="companyFileName"></div>
+                <div class="file-size" id="companyFileSize"></div>
+            </div>
+
+            <!-- Company Metadata Form -->
+            <div id="companyForm" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: #333;">Verification Request Details</h4>
+                <div style="display: grid; gap: 15px;">
+                    <div>
+                        <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #555;">Company Name *</label>
+                        <input type="text" id="companyName" placeholder="e.g., Tech Corp Inc." 
+                               style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 0.95em;" required />
+                    </div>
+                    <div>
+                        <label style="display: block; font-weight: 600; margin-bottom: 5px; color: #555;">Applicant Name *</label>
+                        <input type="text" id="applicantName" placeholder="e.g., John Smith" 
+                               style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 0.95em;" required />
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" id="companyVerifyBtn" disabled style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);">
+                🔍 Verify Certificate Authenticity
+            </button>
+
+            <div class="loading" id="companyLoading">
+                <div class="spinner"></div>
+                <div>Verifying certificate against trusted database...</div>
+            </div>
+
+            <div class="result" id="companyResult"></div>
         </div>
     </div>
 
     <script>
-        let uploadFile = null;
-        let checkFile = null;
+        // No global upload file needed
 
         function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
             
-            if (tab === 'upload') {
-                document.querySelector('.tab:first-child').classList.add('active');
-                document.getElementById('upload-tab').classList.add('active');
-            } else {
-                document.querySelector('.tab:last-child').classList.add('active');
-                document.getElementById('check-tab').classList.add('active');
+            const tabs = document.querySelectorAll('.tab');
+            
+            if (tab === 'academic') {
+                tabs[0].classList.add('active');
+                document.getElementById('academic-tab').classList.add('active');
+            } else if (tab === 'university') {
+                tabs[1].classList.add('active');
+                document.getElementById('university-tab').classList.add('active');
+            } else if (tab === 'company') {
+                tabs[2].classList.add('active');
+                document.getElementById('company-tab').classList.add('active');
             }
         }
 
-        // Upload Area Setup
-        const uploadArea = document.getElementById('uploadArea');
-        const uploadFileInput = document.getElementById('uploadFileInput');
-        const uploadFileInfo = document.getElementById('uploadFileInfo');
-        const uploadFileName = document.getElementById('uploadFileName');
-        const uploadFileSize = document.getElementById('uploadFileSize');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const uploadLoading = document.getElementById('uploadLoading');
-        const uploadResult = document.getElementById('uploadResult');
+        // Academic Check Area Setup
+        let academicFile = null;
+        const academicArea = document.getElementById('academicArea');
+        const academicFileInput = document.getElementById('academicFileInput');
+        const academicFileInfo = document.getElementById('academicFileInfo');
+        const academicFileName = document.getElementById('academicFileName');
+        const academicFileSize = document.getElementById('academicFileSize');
+        const academicBtn = document.getElementById('academicBtn');
+        const academicLoading = document.getElementById('academicLoading');
+        const academicResult = document.getElementById('academicResult');
 
-        setupDragAndDrop(uploadArea, uploadFileInput, (file) => {
-            uploadFile = file;
-            showFileInfo(file, uploadFileInfo, uploadFileName, uploadFileSize);
-            uploadBtn.disabled = false;
-            uploadResult.classList.remove('show');
+        setupDragAndDrop(academicArea, academicFileInput, (file) => {
+            academicFile = file;
+            showFileInfo(file, academicFileInfo, academicFileName, academicFileSize);
+            academicBtn.disabled = false;
+            academicResult.classList.remove('show');
         });
 
-        uploadBtn.addEventListener('click', async () => {
-            if (!uploadFile) return;
+        const academicUploadBtn = document.getElementById('academicUploadBtn');
+        const academicUploadLoading = document.getElementById('academicUploadLoading');
+        const academicUploadResult = document.getElementById('academicUploadResult');
+        let academicCheckData = null;
+
+        academicBtn.addEventListener('click', async () => {
+            if (!academicFile) return;
 
             const formData = new FormData();
-            formData.append('file', uploadFile);
+            formData.append('file', academicFile);
 
-            uploadBtn.disabled = true;
-            uploadLoading.classList.add('show');
-            uploadResult.classList.remove('show');
+            academicBtn.disabled = true;
+            academicLoading.classList.add('show');
+            academicResult.classList.remove('show');
+            academicUploadBtn.style.display = 'none';
+            academicUploadResult.classList.remove('show');
+
+            try {
+                const response = await fetch('http://localhost:3000/check/academic', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                academicLoading.classList.remove('show');
+                
+                if (response.ok) {
+                    academicCheckData = data;
+                    displayCheckResults(data, academicResult, 'academic');
+                    
+                    // Enable upload button if similarity is 40% or less
+                    const similarity = data.xaiAnalysis?.classification?.overallScore || 0;
+                    if (similarity <= 40) {
+                        academicUploadBtn.style.display = 'block';
+                        academicUploadBtn.disabled = false;
+                    } else {
+                        academicUploadBtn.style.display = 'none';
+                    }
+                } else {
+                    showResult(academicResult, 'error', 'Analysis Failed', data.error || 'Unknown error');
+                }
+            } catch (error) {
+                academicLoading.classList.remove('show');
+                showResult(academicResult, 'error', 'Analysis Failed', error.message);
+            } finally {
+                academicBtn.disabled = false;
+            }
+        });
+
+        // Academic upload button (Step 2)
+        academicUploadBtn.addEventListener('click', async () => {
+            if (!academicFile) return;
+
+            const formData = new FormData();
+            formData.append('file', academicFile);
+
+            academicUploadBtn.disabled = true;
+            academicUploadLoading.style.display = 'block';
+            academicUploadLoading.classList.add('show');
+            academicUploadResult.classList.remove('show');
 
             try {
                 const response = await fetch('http://localhost:3000/upload', {
@@ -470,73 +1029,185 @@
                 });
 
                 const data = await response.json();
-                uploadLoading.classList.remove('show');
+                academicUploadLoading.classList.remove('show');
                 
                 if (response.ok) {
                     if (data.status === 'duplicate') {
-                        showResult(uploadResult, 'info', 'Document Already Exists', 
-                            `This document is already in the database (ID: ${data.id})`);
+                        showResult(academicUploadResult, 'info', '✅ Document Already in Database', 
+                            `This document was previously uploaded (ID: ${data.id})`);
                     } else {
-                        showResult(uploadResult, 'success', 'Upload Successful!', 
-                            `Document ID: ${data.id}<br>Chunks created: ${data.chunkCount}`);
+                        showResult(academicUploadResult, 'success', '✅ Upload Successful!', 
+                            `Document ID: ${data.id}<br>Chunks created: ${data.chunkCount}<br><br>Your academic paper has been successfully added to the database.`);
                     }
                 } else {
-                    showResult(uploadResult, 'error', 'Upload Failed', data.error || 'Unknown error');
+                    showResult(academicUploadResult, 'error', '❌ Upload Failed', data.error || 'Unknown error');
                 }
             } catch (error) {
-                uploadLoading.classList.remove('show');
-                showResult(uploadResult, 'error', 'Upload Failed', error.message);
+                academicUploadLoading.classList.remove('show');
+                showResult(academicUploadResult, 'error', '❌ Upload Failed', error.message);
             } finally {
-                uploadBtn.disabled = false;
+                academicUploadBtn.disabled = false;
             }
         });
 
-        // Check Area Setup
-        const checkArea = document.getElementById('checkArea');
-        const checkFileInput = document.getElementById('checkFileInput');
-        const checkFileInfo = document.getElementById('checkFileInfo');
-        const checkFileName = document.getElementById('checkFileName');
-        const checkFileSize = document.getElementById('checkFileSize');
-        const checkBtn = document.getElementById('checkBtn');
-        const checkLoading = document.getElementById('checkLoading');
-        const checkResult = document.getElementById('checkResult');
+        // University Certificate Upload Setup
+        let universityFile = null;
+        const universityArea = document.getElementById('universityArea');
+        const universityFileInput = document.getElementById('universityFileInput');
+        const universityFileInfo = document.getElementById('universityFileInfo');
+        const universityFileName = document.getElementById('universityFileName');
+        const universityFileSize = document.getElementById('universityFileSize');
+        const universityForm = document.getElementById('universityForm');
+        const universityUploadBtn = document.getElementById('universityUploadBtn');
+        const universityLoading = document.getElementById('universityLoading');
+        const universityResult = document.getElementById('universityResult');
 
-        setupDragAndDrop(checkArea, checkFileInput, (file) => {
-            checkFile = file;
-            showFileInfo(file, checkFileInfo, checkFileName, checkFileSize);
-            checkBtn.disabled = false;
-            checkResult.classList.remove('show');
+        setupDragAndDrop(universityArea, universityFileInput, (file) => {
+            universityFile = file;
+            showFileInfo(file, universityFileInfo, universityFileName, universityFileSize);
+            universityForm.style.display = 'block';
+            universityUploadBtn.disabled = false;
+            universityResult.classList.remove('show');
         });
 
-        checkBtn.addEventListener('click', async () => {
-            if (!checkFile) return;
+        // Company Certificate Verification Setup
+        let companyFile = null;
+        const companyArea = document.getElementById('companyArea');
+        const companyFileInput = document.getElementById('companyFileInput');
+        const companyFileInfo = document.getElementById('companyFileInfo');
+        const companyFileName = document.getElementById('companyFileName');
+        const companyFileSize = document.getElementById('companyFileSize');
+        const companyForm = document.getElementById('companyForm');
+        const companyVerifyBtn = document.getElementById('companyVerifyBtn');
+        const companyLoading = document.getElementById('companyLoading');
+        const companyResult = document.getElementById('companyResult');
+
+        setupDragAndDrop(companyArea, companyFileInput, (file) => {
+            companyFile = file;
+            showFileInfo(file, companyFileInfo, companyFileName, companyFileSize);
+            companyForm.style.display = 'block';
+            companyVerifyBtn.disabled = false;
+            companyResult.classList.remove('show');
+        });
+
+        // University Certificate Upload Handler
+        universityUploadBtn.addEventListener('click', async () => {
+            if (!universityFile) return;
+
+            // Validate form fields
+            const univName = document.getElementById('universityName').value.trim();
+            const studName = document.getElementById('studentName').value.trim();
+            const certType = document.getElementById('certificateType').value;
+            const issDate = document.getElementById('issueDate').value;
+
+            if (!univName || !studName || !certType || !issDate) {
+                alert('Please fill in all certificate details');
+                return;
+            }
 
             const formData = new FormData();
-            formData.append('file', checkFile);
+            formData.append('file', universityFile);
+            formData.append('universityName', univName);
+            formData.append('studentName', studName);
+            formData.append('certificateType', certType);
+            formData.append('issueDate', issDate);
 
-            checkBtn.disabled = true;
-            checkLoading.classList.add('show');
-            checkResult.classList.remove('show');
+            universityUploadBtn.disabled = true;
+            universityLoading.classList.add('show');
+            universityResult.classList.remove('show');
 
             try {
-                const response = await fetch('http://localhost:3000/check', {
+                const response = await fetch('http://localhost:3000/certificate/upload', {
                     method: 'POST',
                     body: formData
                 });
 
                 const data = await response.json();
-                checkLoading.classList.remove('show');
+                universityLoading.classList.remove('show');
                 
                 if (response.ok) {
-                    displayCheckResults(data);
+                    const metadata = data.metadata || {};
+                    if (data.status === 'duplicate') {
+                        showResult(universityResult, 'info', '📋 Certificate Already Exists', 
+                            `This certificate is already in the trusted database (ID: ${data.id})<br><br>
+                            <strong>Student:</strong> ${metadata.studentName}<br>
+                            <strong>University:</strong> ${metadata.universityName}<br>
+                            <strong>Type:</strong> ${metadata.certificateType}`);
+                    } else {
+                        showResult(universityResult, 'success', '✅ Certificate Uploaded Successfully!', 
+                            `<strong>Document ID:</strong> ${data.id}<br>
+                            <strong>Chunks Created:</strong> ${data.chunkCount}<br><br>
+                            <strong>Certificate Details:</strong><br>
+                            • Student: ${metadata.studentName}<br>
+                            • University: ${metadata.universityName}<br>
+                            • Type: ${metadata.certificateType}<br>
+                            • Issue Date: ${metadata.issueDate}<br><br>
+                            This certificate is now stored in the trusted database and can be verified by employers.`);
+                    }
                 } else {
-                    showResult(checkResult, 'error', 'Check Failed', data.error || 'Unknown error');
+                    showResult(universityResult, 'error', '❌ Upload Failed', data.error || 'Unknown error');
                 }
             } catch (error) {
-                checkLoading.classList.remove('show');
-                showResult(checkResult, 'error', 'Check Failed', error.message);
+                universityLoading.classList.remove('show');
+                showResult(universityResult, 'error', '❌ Upload Failed', error.message);
             } finally {
-                checkBtn.disabled = false;
+                universityUploadBtn.disabled = false;
+            }
+        });
+
+        // Company Certificate Verification Handler
+        companyVerifyBtn.addEventListener('click', async () => {
+            if (!companyFile) return;
+
+            // Validate form fields
+            const compName = document.getElementById('companyName').value.trim();
+            const applName = document.getElementById('applicantName').value.trim();
+
+            if (!compName || !applName) {
+                alert('Please fill in company name and applicant name');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', companyFile);
+            formData.append('companyName', compName);
+            formData.append('applicantName', applName);
+
+            companyVerifyBtn.disabled = true;
+            companyLoading.classList.add('show');
+            companyResult.classList.remove('show');
+
+            try {
+                const response = await fetch('http://localhost:3000/certificate/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                companyLoading.classList.remove('show');
+                
+                if (response.ok) {
+                    displayCheckResults(data, companyResult, 'verification');
+                    
+                    // Add verification request info at the top
+                    const verificationInfo = data.verificationRequest || {};
+                    const infoDiv = document.createElement('div');
+                    infoDiv.style.cssText = 'background: #e7f3ff; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #17a2b8;';
+                    infoDiv.innerHTML = `
+                        <strong>Verification Request:</strong><br>
+                        Company: ${verificationInfo.companyName}<br>
+                        Applicant: ${verificationInfo.applicantName}<br>
+                        Verified At: ${new Date(verificationInfo.verifiedAt).toLocaleString()}
+                    `;
+                    companyResult.insertBefore(infoDiv, companyResult.firstChild);
+                } else {
+                    showResult(companyResult, 'error', '❌ Verification Failed', data.error || 'Unknown error');
+                }
+            } catch (error) {
+                companyLoading.classList.remove('show');
+                showResult(companyResult, 'error', '❌ Verification Failed', error.message);
+            } finally {
+                companyVerifyBtn.disabled = false;
             }
         });
 
@@ -592,8 +1263,20 @@
             `;
         }
 
-        function displayCheckResults(data) {
+        function displayCheckResults(data, resultDiv = checkResult, mode = 'auto') {
             let resultType, title, details;
+
+            // Display XAI Analysis first if available
+            if (data.xaiAnalysis && !data.xaiAnalysis.error) {
+                displayXAIAnalysis(data.xaiAnalysis, resultDiv, mode);
+                
+                // Add threshold indicator for academic or forgery alert for verification
+                if (data.xaiAnalysis.documentType === 'academic') {
+                    addAcademicThresholdIndicator(data.xaiAnalysis, resultDiv);
+                } else if (data.xaiAnalysis.documentType === 'verification') {
+                    addVerificationStatusIndicator(data.xaiAnalysis, resultDiv);
+                }
+            }
 
             if (data.matchType === 'document') {
                 resultType = 'error';
@@ -673,7 +1356,7 @@
                 }
             }
 
-            showResult(checkResult, resultType, title, details);
+            showResult(resultDiv, resultType, title, details);
         }
 
         function renderMatchedSections(matches) {
@@ -742,6 +1425,370 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function displayXAIAnalysis(xaiAnalysis, resultDiv, mode) {
+            const docTypeLabel = xaiAnalysis.documentType === 'academic' 
+                ? '📄 Academic Document' 
+                : '🆔 Verification Document';
+            
+            const xaiHTML = `
+                <div class="xai-section">
+                    <div class="xai-header">
+                        🤖 XAI Analysis 
+                        <span class="document-type-badge">${docTypeLabel}</span>
+                    </div>
+                    
+                    <div class="classification-badge ${xaiAnalysis.riskLevel}">
+                        ${xaiAnalysis.classification.label} - Risk: ${xaiAnalysis.riskLevel.toUpperCase()}
+                    </div>
+
+                    <div class="confidence-meter">
+                        <span class="confidence-label">Confidence:</span>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${xaiAnalysis.confidence}%"></div>
+                        </div>
+                        <span class="confidence-value">${xaiAnalysis.confidence}%</span>
+                    </div>
+
+                    ${renderXAISummary(xaiAnalysis)}
+                    ${renderFeatureContributions(xaiAnalysis)}
+                    ${renderReasons(xaiAnalysis)}
+                    ${renderRecommendations(xaiAnalysis)}
+                    ${renderAlerts(xaiAnalysis)}
+                </div>
+            `;
+
+            // Insert XAI analysis before match details
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = xaiHTML;
+            resultDiv.insertBefore(tempDiv.firstElementChild, resultDiv.firstChild);
+        }
+
+        function renderXAISummary(xai) {
+            if (!xai.explanation || !xai.explanation.summary) return '';
+            return `
+                <div class="xai-summary">
+                    <strong>📊 Analysis Summary:</strong><br>
+                    ${xai.explanation.summary}
+                </div>
+            `;
+        }
+
+        function renderFeatureContributions(xai) {
+            if (xai.documentType === 'academic' && xai.contributions) {
+                const contributions = xai.contributions;
+                return `
+                    <div class="feature-chart">
+                        <h4 style="margin-bottom: 15px; color: #333;">📈 Feature Contributions (SHAP Values)</h4>
+                        ${Object.entries(contributions).map(([feature, score]) => `
+                            <div class="feature-bar">
+                                <div class="feature-label">
+                                    <span>${feature.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                    <span>${score.toFixed(1)}%</span>
+                                </div>
+                                <div class="feature-progress">
+                                    <div class="feature-fill" style="width: ${Math.min(100, score)}%">
+                                        ${score > 15 ? score.toFixed(0) + '%' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else if (xai.documentType === 'verification' && xai.authenticity) {
+                const auth = xai.authenticity;
+                return `
+                    <div class="feature-chart">
+                        <h4 style="margin-bottom: 15px; color: #333;">🔒 Authenticity Factors</h4>
+                        ${Object.entries(auth).map(([feature, score]) => `
+                            <div class="feature-bar">
+                                <div class="feature-label">
+                                    <span>${feature.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                    <span>${score.toFixed(1)}%</span>
+                                </div>
+                                <div class="feature-progress">
+                                    <div class="feature-fill" style="width: ${Math.min(100, score)}%; background: ${score > 70 ? '#28a745' : score > 40 ? '#ffc107' : '#dc3545'}">
+                                        ${score > 15 ? score.toFixed(0) + '%' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            return '';
+        }
+
+        function renderReasons(xai) {
+            if (!xai.explanation || !xai.explanation.reasons || xai.explanation.reasons.length === 0) {
+                return '';
+            }
+
+            return `
+                <div class="xai-reasons">
+                    <h4 style="margin-bottom: 10px; color: #333;">🔍 Why This Classification?</h4>
+                    ${xai.explanation.reasons.map(reason => {
+                        const thresholdBadge = reason.thresholdStatus ? 
+                            `<span style="float: right; background: ${getThresholdStatusColor(reason.thresholdStatus)}; color: ${reason.thresholdStatus === 'ACCEPTABLE' || reason.thresholdStatus === 'ORIGINAL' ? 'white' : '#000'}; padding: 3px 10px; border-radius: 12px; font-size: 0.8em; font-weight: 600;">
+                                ${reason.thresholdStatus.replace('_', ' ')}
+                            </span>` : '';
+                        
+                        return `
+                            <div class="reason-item ${reason.severity}">
+                                <div class="reason-header">
+                                    ${getIconForSeverity(reason.severity)} ${reason.factor} (${reason.contribution.toFixed(1)}%)
+                                    ${thresholdBadge}
+                                </div>
+                                <div class="reason-description">${reason.description}</div>
+                                ${reason.recommendation ? `<div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.5); border-radius: 5px; font-size: 0.85em;"><strong>Recommendation:</strong> ${reason.recommendation}</div>` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function getThresholdStatusColor(status) {
+            const colors = {
+                'ORIGINAL': '#17a2b8',
+                'ACCEPTABLE': '#28a745',
+                'REVIEW_ZONE': '#ffc107',
+                'EXCEEDED': '#dc3545'
+            };
+            return colors[status] || '#6c757d';
+        }
+
+        function renderRecommendations(xai) {
+            if (!xai.recommendations || xai.recommendations.length === 0) return '';
+
+            return `
+                <div class="recommendations">
+                    <h4>💡 Recommendations</h4>
+                    <ul>
+                        ${xai.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        function renderAlerts(xai) {
+            if (!xai.alerts || xai.alerts.length === 0) return '';
+
+            return `
+                <div class="alerts">
+                    <h4 style="margin-bottom: 10px; color: #333;">⚠️ Alerts</h4>
+                    ${xai.alerts.map(alert => `
+                        <div class="alert-item ${alert.level}">
+                            ${getIconForAlertLevel(alert.level)} ${alert.message}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function getIconForSeverity(severity) {
+            const icons = {
+                critical: '🔴',
+                high: '🟠',
+                medium: '🟡',
+                low: '🟢'
+            };
+            return icons[severity] || '⚪';
+        }
+
+        function getIconForAlertLevel(level) {
+            const icons = {
+                critical: '🚨',
+                high: '⚠️',
+                medium: 'ℹ️'
+            };
+            return icons[level] || 'ℹ️';
+        }
+
+        function addAcademicThresholdIndicator(xai, resultDiv) {
+            const classification = xai.classification;
+            const action = classification.actionRequired || 'REVIEW';
+            const similarity = classification.overallScore || 0;
+            
+            let statusClass, statusIcon, statusMessage;
+            
+            if (action === 'APPROVE' && similarity < 30) {
+                statusClass = 'acceptable';
+                statusIcon = '✅';
+                statusMessage = 'ACCEPTABLE FOR UPLOAD';
+            } else if (action === 'REVIEW' || (similarity >= 30 && similarity <= 40)) {
+                statusClass = 'review';
+                statusIcon = '⚠️';
+                statusMessage = 'REVIEW REQUIRED';
+            } else {
+                statusClass = 'reject';
+                statusIcon = '❌';
+                statusMessage = 'CANNOT BE ACCEPTED';
+            }
+            
+            const thresholdHTML = `
+                <div class="threshold-indicator ${statusClass}">
+                    <div style="font-size: 2em; margin-bottom: 10px;">${statusIcon}</div>
+                    <div style="font-size: 1.3em; margin-bottom: 10px;">${statusMessage}</div>
+                    <div style="font-size: 0.9em; opacity: 0.9;">Action: ${action}</div>
+                    
+                    <div class="threshold-details">
+                        <div class="threshold-item">
+                            <div class="threshold-label">Current Similarity</div>
+                            <div class="threshold-value" style="color: ${similarity > 40 ? '#dc3545' : similarity >= 30 ? '#ffc107' : '#28a745'}">
+                                ${similarity.toFixed(1)}%
+                            </div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">Acceptable Range</div>
+                            <div class="threshold-value" style="color: #28a745; font-size: 1.2em;">
+                                0-30%
+                            </div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">Review Range</div>
+                            <div class="threshold-value" style="color: #ffc107; font-size: 1.2em;">
+                                30-40%
+                            </div>
+                        </div>
+                        <div class="threshold-item">
+                            <div class="threshold-label">Reject Threshold</div>
+                            <div class="threshold-value" style="color: #dc3545; font-size: 1.2em;">
+                                >40%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 8px; font-size: 0.85em; text-align: left;">
+                        <strong>Policy:</strong> Academic documents with 0-30% similarity are acceptable and reflect normal citation usage. 
+                        Documents with 30-40% require manual review. Anything above 40% is considered plagiarism and must be rejected.
+                    </div>
+                </div>
+            `;
+            
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = thresholdHTML;
+            resultDiv.appendChild(tempDiv.firstElementChild);
+        }
+
+        function addVerificationStatusIndicator(xai, resultDiv) {
+            const classification = xai.classification;
+            const action = classification.actionRequired || 'REJECT';
+            const forgeryDetails = classification.forgeryDetails || [];
+            
+            // For 100% match (duplicate)
+            if (classification.label.includes('100% Match') || classification.label.includes('Duplicate')) {
+                const duplicateHTML = `
+                    <div class="forgery-alert">
+                        <div class="forgery-header">
+                            🚨 100% DUPLICATE DETECTED
+                        </div>
+                        <div style="font-size: 1.1em; color: #721c24; margin-bottom: 15px; line-height: 1.6;">
+                            This certificate is an exact duplicate (100% match) of a document already in the database. 
+                            Authentic certificates are unique and cannot exist in multiple copies.
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                            <strong style="color: #dc3545;">Action Required:</strong> REJECT - This is a duplicate submission.
+                            <br><br>
+                            <strong>Verification Policy:</strong> Certificates must be 100% unique. Any match indicates resubmission or fraudulent duplication.
+                        </div>
+                    </div>
+                `;
+                
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = duplicateHTML;
+                resultDiv.appendChild(tempDiv.firstElementChild);
+                return;
+            }
+            
+            // For forgery detection
+            if (forgeryDetails.length > 0) {
+                const forgeryHTML = `
+                    <div class="forgery-alert">
+                        <div class="forgery-header">
+                            ⚠️ FORGERY DETECTED
+                        </div>
+                        <div style="font-size: 1.05em; color: #721c24; margin-bottom: 15px;">
+                            The XAI system has identified ${forgeryDetails.length} issue(s) indicating potential document forgery:
+                        </div>
+                        
+                        ${forgeryDetails.map((detail, idx) => `
+                            <div class="forgery-item">
+                                <div class="forgery-issue">
+                                    ${idx + 1}. ${detail.issue}
+                                    <span style="float: right; background: ${getSeverityColor(detail.severity)}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.85em;">
+                                        ${detail.severity.toUpperCase()}
+                                    </span>
+                                </div>
+                                <div class="forgery-explanation">
+                                    <strong>Problem:</strong> ${detail.explanation}
+                                </div>
+                                ${detail.recommendation ? `
+                                    <div class="forgery-recommendation">
+                                        <strong>💡 Recommendation:</strong> ${detail.recommendation}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                        
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                            <strong style="color: #dc3545; font-size: 1.1em;">Action Required: ${action}</strong>
+                            <br><br>
+                            <strong>Verification Policy:</strong> Certificates must be 100% authentic with no signs of tampering. 
+                            Any deviation from official formats, missing identifiers, or structural inconsistencies indicate forgery.
+                        </div>
+                    </div>
+                `;
+                
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = forgeryHTML;
+                resultDiv.appendChild(tempDiv.firstElementChild);
+            } else if (action === 'APPROVE' || classification.riskLevel === 'none' || classification.riskLevel === 'low') {
+                // Likely authentic
+                const authenticHTML = `
+                    <div class="threshold-indicator acceptable">
+                        <div style="font-size: 2em; margin-bottom: 10px;">✅</div>
+                        <div style="font-size: 1.3em; margin-bottom: 10px;">APPEARS AUTHENTIC</div>
+                        <div style="font-size: 0.9em; opacity: 0.9;">Action: ${action}</div>
+                        
+                        <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 8px; font-size: 0.85em;">
+                            Document passes initial authenticity checks. However, manual verification with issuing authority is recommended for final confirmation.
+                        </div>
+                    </div>
+                `;
+                
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = authenticHTML;
+                resultDiv.appendChild(tempDiv.firstElementChild);
+            } else {
+                // Questionable
+                const questionableHTML = `
+                    <div class="threshold-indicator review">
+                        <div style="font-size: 2em; margin-bottom: 10px;">⚠️</div>
+                        <div style="font-size: 1.3em; margin-bottom: 10px;">QUESTIONABLE AUTHENTICITY</div>
+                        <div style="font-size: 0.9em; opacity: 0.9;">Action: ${action}</div>
+                        
+                        <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.7); border-radius: 8px; font-size: 0.85em;">
+                            The document shows some concerning indicators. Immediate manual verification required before acceptance.
+                        </div>
+                    </div>
+                `;
+                
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = questionableHTML;
+                resultDiv.appendChild(tempDiv.firstElementChild);
+            }
+        }
+
+        function getSeverityColor(severity) {
+            const colors = {
+                critical: '#dc3545',
+                high: '#fd7e14',
+                medium: '#ffc107',
+                low: '#28a745'
+            };
+            return colors[severity] || '#6c757d';
         }
     </script>
 </body>

@@ -1,12 +1,18 @@
 import pool from './Database/db.js';
 import { extractTextFromPdf } from './ingest.js';
 import { chunkText, normalize, sha256 } from './util.js';
+import { XAIAnalyzer } from './xai/xaiAnalyzer.js';
 
-export async function searchDocument({ buffer }) {
+export async function searchDocument({ buffer, documentType = 'auto' }) {
   const rawText = await extractTextFromPdf(buffer);
   const normalized = normalize(rawText);
   if (!normalized) {
-    return { matchType: 'fuzzy_trigram', results: [] };
+    return { matchType: 'fuzzy_trigram', results: [], xaiAnalysis: null };
+  }
+
+  // Auto-detect document type if not specified
+  if (documentType === 'auto') {
+    documentType = detectDocumentType(normalized);
   }
 
   const docHash = sha256(normalized);
@@ -144,5 +150,72 @@ export async function searchDocument({ buffer }) {
     }))
     .sort((a, b) => b.score - a.score);
 
-  return { matchType: 'fuzzy_trigram', results: fuzzyResults };
+  const matchResults = { matchType: 'fuzzy_trigram', results: fuzzyResults };
+
+  // Generate XAI analysis based on document type
+  const xaiAnalysis = generateXAIAnalysis(normalized, matchResults, documentType);
+
+  return { ...matchResults, xaiAnalysis, detectedDocumentType: documentType };
+}
+
+/**
+ * Auto-detect document type based on content
+ */
+function detectDocumentType(text) {
+  const wordCount = text.split(/\s+/).length;
+  
+  // Short documents (< 500 words) are likely verification documents
+  if (wordCount < 500) {
+    return 'verification';
+  }
+  
+  // Check for academic indicators
+  const academicIndicators = [
+    /\b(abstract|introduction|methodology|results|discussion|conclusion)\b/i,
+    /\b(research|study|analysis|hypothesis|experiment)\b/i,
+    /\[[0-9]+\]/,  // Citations
+    /\b(et al\.|ibid|op\. cit\.)\b/i
+  ];
+  
+  const academicScore = academicIndicators.filter(pattern => pattern.test(text)).length;
+  
+  // Check for verification document indicators
+  const verificationIndicators = [
+    /\b(certificate|certification|diploma|degree)\b/i,
+    /\b(passport|identification|national id)\b/i,
+    /\b(hereby|certify|authorized|issued|valid)\b/i,
+    /\b[A-Z]{2,}\d{5,}\b/,  // Serial numbers
+    /\b(seal|stamp|signature|emblem)\b/i
+  ];
+  
+  const verificationScore = verificationIndicators.filter(pattern => pattern.test(text)).length;
+  
+  // Decision based on scores
+  if (verificationScore > academicScore) {
+    return 'verification';
+  } else if (academicScore > 0 || wordCount > 1000) {
+    return 'academic';
+  } else {
+    return 'verification'; // Default for short documents
+  }
+}
+
+/**
+ * Generate XAI analysis with explanations
+ */
+function generateXAIAnalysis(text, matchResults, documentType) {
+  try {
+    if (documentType === 'academic') {
+      return XAIAnalyzer.analyzeAcademicDocument(text, matchResults);
+    } else {
+      return XAIAnalyzer.analyzeVerificationDocument(text, matchResults);
+    }
+  } catch (error) {
+    console.error('XAI Analysis Error:', error);
+    return {
+      error: 'XAI analysis failed',
+      documentType,
+      message: error.message
+    };
+  }
 }
