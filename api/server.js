@@ -7,7 +7,8 @@ const { exec } = require('child_process');
 const util = require('util');
 
 const blockchainConnector = require('./blockchain/connector');
-const xaiAnalyzer = require('./xai/analyzer');
+// const xaiAnalyzer = require('./xai/analyzer'); // Old simulated analyzer
+const xaiAnalyzer = require('./xai/real-analyzer'); // Real Python-based analyzer
 const dbHandler = require('./database/handler');
 
 const execPromise = util.promisify(exec);
