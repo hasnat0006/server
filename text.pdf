@@ -1,0 +1,113 @@
+2024 IEEE 12th Conference on Systems, Process & Control (ICSPC), 7 December 2024, Malacca, Malaysia
+2024 IEEE 12th Conference on Systems, Process & Control (ICSPC) | 979-8-3503-9139-8/24/$31.00 ©2024 IEEE | DOI: 10.1109/ICSPC63060.2024.10862981
+Harnessing Blockchain and Generative AI to
+Prevent Certificate Forgery and Enhance
+Educational Integrity
+1Richard Wiputra2Ali Gunawan3Ervin
+Information Systems Department,
+School of Information Systems
+Bina Nusantara University
+Jakarta, Indonesia
+richard-slc@binus.eduInformation Systems Department,
+School of Information Systems
+Bina Nusantara University
+Jakarta, Indonesia
+gunlee77@binus.ac.idInformation Systems Department,
+School of Information Systems
+Bina Nusantara University
+Jakarta, Indonesia
+ervin004@binus.ac.id
+4Arista Wijaksana
+Information Systems Department,
+School of Information Systems
+Bina Nusantara University
+Ja
+initial search criteria. These keywords set the research
+parameters and offer a comprehensive overview of the current
+applications of blockchain and generative AI in the education
+sector.
+TABLE I.
+PRIMARY AND SECONDARY CRITERIA
+Primary
+Secondary
+InclusionExclusionInclusionExclusion
+1. Journal
+articles
+2. Conference
+articles
+3. Peer-
+reviewed
+4. Accessible
+online
+5. Written in
+English1. Duplicate
+records
+2. Textbooks
+3. PatentBlockchain in
+Education OR
+Smart Contract
+OR Academic
+Certificate OR
+Academic
+Validity
+OR
+Generative AI
+in EducationNot in
+Academic
+related issue
+Not in Smart
+Contract
+Blockchain
+technology
+scope (e.g.,
+cryptocurrency
+trading)
+Fig. 1. Search, filter, and review process.
+After processing the 36 selected articles using descriptive
+techniques, the analysis will focus on extracting key insights
+and patterns related to integrating blockchain and generative
+AI in educational data management.
+The initial search covered several bibliographic repositories,
+including IEEE Xplore, Science Direct, ProQuest, and Google
+Scholar. The search was conducted in November 2023 and
+included articles published between November 2018 and
+January 2024. A total of 1,139 results met the search criteria.
+III. RESULT
+The following sections will present the findings, which
+offer a comprehensive view of how blockchain and generative
+AI can enhance academic data integrity and combat diploma
+forgery. The results section will detail the outcomes of this
+analysis, highlighting the potential impact and practical
+implications for educational institutions.
+B. Stage 2 (Filter and Review Stage)
+The remaining 90 articles were screened at this stage using
+the main inclusion/exclusion criteria. This filtering stage has
+a 2 step filtering process. First, we read the title, abstract, and
+keywords, and then we discarded articles that were excluded
+from inclusion. The second step is the reading process. We
+read the contents of the articles thoroughly to find papers to
+review. The final number of articles in the review process was
+36. This review will be based on the initial research objectives,
+which include research questions :
+A. General Description
+The general description section of the results highlights
+trends in the number and types of publications on blockchain
+and generative AI in education. This analysis reveals the trend
+in publications over recent years, with a diverse range of
+publication types, including journal articles and conference
+papers.
+• How can implementing blockchain smart contracts
+guarantee the security and privacy of students'
+educational history data?
+• How can blockchain smart contracts optimize student
+educational history data sharing between departments,
+companies, and academic institutions?
+• What is the impact of using blockchain technology in
+overcoming diploma forgery in education?
+• What challenges arise in applying blockchain technology
+to improve the validity and management of diploma data?
+• How can the integration of Blockchain and Generative AI
+enhance academic data integrity?
+Fig. 2. Publication trend of blockchain in education
+234
+Authorized licensed use limited to: Military Institute of Science and Technology. Downloaded on August 31,2025 at 02:13:50 UTC from IEEE Xplore. Restrictions apply.

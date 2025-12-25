@@ -1,0 +1,165 @@
+{
+  "documents": [
+    {
+      "id": 1,
+      "originalName": "Harnessing_Blockchain_and_Generative_AI_to_Prevent_Certificate_Forgery_and_Enhance_Educational_Integrity.pdf",
+      "fileName": "document-1766660590170-628292219.pdf",
+      "filePath": "uploads/document-1766660590170-628292219.pdf",
+      "fileSize": 478482,
+      "documentType": "research_paper",
+      "uploaderName": "refath",
+      "status": "verified",
+      "createdAt": "2025-12-25T11:03:10.179Z",
+      "updatedAt": "2025-12-25T11:03:10.426Z",
+      "xaiResults": {
+        "documentHash": "0x63165171d40fdaee7c8d98b618c90fa3ff911719dc92e6a8267adfcb08d75b1f",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2025-12-25T11:03:10.185Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 14,
+          "threshold": 75,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 30,
+          "threshold": 60,
+          "indicators": [],
+          "explanation": "Document appears to be human-written"
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 14% similarity (below 75% threshold)",
+            "✅ AI detection: 30% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 1,
+          "documentType": "research_paper",
+          "originalName": "Harnessing_Blockchain_and_Generative_AI_to_Prevent_Certificate_Forgery_and_Enhance_Educational_Integrity.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0x63165171d40fdaee7c8d98b618c90fa3ff911719dc92e6a8267adfcb08d75b1f",
+        "transactionHash": "0x7b38e5ec8e6b7a6c15b7bbdf038869c4d43c43f9d4c63e67f9a11655347ea1b2",
+        "blockNumber": 2,
+        "gasUsed": "1121956",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0x63165171d40fdaee7c8d98b618c90fa3ff911719dc92e6a8267adfcb08d75b1f"
+    },
+    {
+      "id": 2,
+      "originalName": "Harnessing_Blockchain_and_Generative_AI_to_Prevent_Certificate_Forgery_and_Enhance_Educational_Integrity.pdf",
+      "fileName": "document-1766660625361-550349739.pdf",
+      "filePath": "uploads/document-1766660625361-550349739.pdf",
+      "fileSize": 478482,
+      "documentType": "research_paper",
+      "uploaderName": "refath",
+      "status": "analyzing",
+      "createdAt": "2025-12-25T11:03:45.367Z",
+      "updatedAt": "2025-12-25T11:03:45.367Z"
+    },
+    {
+      "id": 3,
+      "originalName": "text.pdf",
+      "fileName": "document-1766660740283-203331297.pdf",
+      "filePath": "uploads/document-1766660740283-203331297.pdf",
+      "fileSize": 9891,
+      "documentType": "research_paper",
+      "uploaderName": "refath",
+      "status": "verified",
+      "createdAt": "2025-12-25T11:05:40.285Z",
+      "updatedAt": "2025-12-25T11:05:40.505Z",
+      "xaiResults": {
+        "documentHash": "0x995a174a4b1d96c07e7f2b4779ec8060825e28d0ec541ebca9e1a85252bde6cb",
+        "status": "verified",
+        "confidenceScore": 93,
+        "timestamp": "2025-12-25T11:05:40.287Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 4,
+          "threshold": 75,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 27,
+          "threshold": 60,
+          "indicators": [],
+          "explanation": "Document appears to be human-written"
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 4% similarity (below 75% threshold)",
+            "✅ AI detection: 27% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 3,
+          "documentType": "research_paper",
+          "originalName": "text.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0x995a174a4b1d96c07e7f2b4779ec8060825e28d0ec541ebca9e1a85252bde6cb",
+        "transactionHash": "0xb83f650dabae942df1d5a090cffc59805fb278045afca904dd336a326a9eaf57",
+        "blockNumber": 5,
+        "gasUsed": "944292",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0x995a174a4b1d96c07e7f2b4779ec8060825e28d0ec541ebca9e1a85252bde6cb"
+    },
+    {
+      "id": 4,
+      "originalName": "123.pdf",
+      "fileName": "document-1766660799433-704101232.pdf",
+      "filePath": "uploads/document-1766660799433-704101232.pdf",
+      "fileSize": 9891,
+      "documentType": "research_paper",
+      "uploaderName": "refath",
+      "status": "analyzing",
+      "createdAt": "2025-12-25T11:06:39.436Z",
+      "updatedAt": "2025-12-25T11:06:39.436Z"
+    },
+    {
+      "id": 5,
+      "originalName": "123.pdf",
+      "fileName": "document-1766660832743-227883951.pdf",
+      "filePath": "uploads/document-1766660832743-227883951.pdf",
+      "fileSize": 9891,
+      "documentType": "research_paper",
+      "uploaderName": "refath",
+      "status": "analyzing",
+      "createdAt": "2025-12-25T11:07:12.745Z",
+      "updatedAt": "2025-12-25T11:07:12.745Z"
+    },
+    {
+      "id": 6,
+      "originalName": "11.pdf",
+      "fileName": "document-1766660866414-476280146.pdf",
+      "filePath": "uploads/document-1766660866414-476280146.pdf",
+      "fileSize": 9891,
+      "documentType": "research_paper",
+      "uploaderName": "refath",
+      "status": "analyzing",
+      "createdAt": "2025-12-25T11:07:46.417Z",
+      "updatedAt": "2025-12-25T11:07:46.417Z"
+    }
+  ],
+  "nextId": 7
+}
