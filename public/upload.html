@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Verification System - XAI + Blockchain</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .subtitle-badges {
+            text-align: center;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.75em;
+            font-weight: 600;
+        }
+
+        .badge-xai {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge-blockchain {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .badge-postgres {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .workflow-info {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .workflow-info strong {
+            color: #667eea;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 14px 10px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.95em;
+            color: #666;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+            background: #f8f9ff;
+        }
+
+        .tab:hover {
+            color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 15px;
+            padding: 50px 20px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: #fafafa;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-info {
+            display: none;
+            background: #f0f4ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-details {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+
+        .check-btn {
+            background: linear-gradient(135deg, #0066cc 0%, #004d99 100%);
+            color: white;
+            padding: 14px 40px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+            font-weight: 600;
+            width: 100%;
+        }
+
+        .check-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .check-btn:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 102, 204, 0.3);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .result.info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
+        /* Blockchain section styles */
+        .blockchain-section {
+            margin-top: 25px;
+            padding: 25px;
+            background: linear-gradient(135deg, #e3f2fd 0%, #e8f5e9 100%);
+            border-radius: 12px;
+            border: 2px solid #1976d2;
+        }
+
+        .blockchain-header {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #1565c0;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .blockchain-status {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .blockchain-field {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .blockchain-field:last-child {
+            border-bottom: none;
+        }
+
+        .blockchain-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .blockchain-value {
+            color: #333;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+            text-align: right;
+            max-width: 60%;
+        }
+
+        .success-badge {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 15px 0;
+        }
+
+        .xai-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .xai-header {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .document-type-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+
+        .classification-badge {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+
+        .classification-badge.none {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .classification-badge.low {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .classification-badge.medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .classification-badge.high {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .confidence-meter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .confidence-bar {
+            flex: 1;
+            height: 20px;
+            background: #eee;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            transition: width 0.5s ease;
+        }
+
+        .confidence-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .feature-chart {
+            margin-top: 20px;
+        }
+
+        .feature-bar {
+            margin: 10px 0;
+        }
+
+        .feature-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .feature-progress {
+            height: 25px;
+            background: #eee;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .feature-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85em;
+            transition: width 0.5s ease;
+        }
+
+        .xai-reasons {
+            margin-top: 20px;
+        }
+
+        .reason-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .reason-item.critical {
+            border-left-color: #dc3545;
+        }
+
+        .reason-item.high {
+            border-left-color: #fd7e14;
+        }
+
+        .reason-item.medium {
+            border-left-color: #ffc107;
+        }
+
+        .reason-item.low {
+            border-left-color: #28a745;
+        }
+
+        .reason-header {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .reason-description {
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .match-list {
+            margin-top: 15px;
+        }
+
+        .match-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .match-score {
+            font-weight: 600;
+            color: #667eea;
+            margin-top: 5px;
+        }
+
+        .recommendations {
+            margin-top: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .recommendations h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .recommendations ul {
+            margin-left: 20px;
+        }
+
+        .recommendations li {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+
+        .alerts {
+            margin-top: 20px;
+        }
+
+        .alert-item {
+            background: white;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .alert-item.critical {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .alert-item.high {
+            border-left-color: #fd7e14;
+        }
+
+        .threshold-indicator {
+            margin-top: 25px;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 600;
+        }
+
+        .threshold-indicator.acceptable {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+
+        .threshold-indicator.review {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            color: #856404;
+            border: 2px solid #ffc107;
+        }
+
+        .threshold-indicator.reject {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            color: #721c24;
+            border: 2px solid #dc3545;
+        }
+
+        .threshold-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .threshold-item {
+            background: rgba(255,255,255,0.7);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .threshold-label {
+            font-size: 0.85em;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .threshold-value {
+            font-size: 1.5em;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 Document Verification System</h1>
+        <div class="subtitle">XAI-Powered Document Analysis & Authentication</div>
+        <div class="subtitle-badges">
+            <span class="badge badge-xai">🤖 XAI Analysis</span>
+            <span class="badge badge-blockchain">⛓️ Blockchain Registry</span>
+            <span class="badge badge-postgres">🗄️ Neon DB</span>
+        </div>
+
+        <div class="workflow-info">
+            <strong>Workflow:</strong> Upload → XAI checks similarity, plagiarism & authenticity → 
+            If passed → Automatic blockchain registration → Stored in Neon DB → Immutable proof generated
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="academic">📚 Academic Papers</button>
+            <button class="tab" data-tab="university">🎓 University Upload</button>
+            <button class="tab" data-tab="company">🏢 Company Verify</button>
+        </div>
+
+        <!-- Academic Paper Tab -->
+        <div id="academicTab" class="tab-content active">
+            <h3>🎓 Academic Paper Plagiarism Checker</h3>
+            <p style="margin: 10px 0; color: #666; font-size: 0.9em;">
+                Upload your research paper, journal, or thesis for plagiarism analysis. The XAI system will check similarity 
+                against existing documents by doing vector search by dividing into chunk, analyze the documents and provide detailed explanation. 
+                Documents with &lt;30% similarity will be automatically registered on blockchain.
+            </p>
+            
+            <div id="academicArea" class="upload-area">
+                <div class="upload-icon">📄</div>
+                <h3>Drag & Drop Academic Document</h3>
+                <p>Papers, Journals, Thesis, Articles</p>
+                <p style="margin-top: 10px; font-size: 0.9em; color: #888;">Supported formats: PDF</p>
+                <input type="file" id="academicFileInput" class="file-input" accept=".pdf">
+            </div>
+
+            <div id="academicFileInfo" class="file-info">
+                <h4>Selected File:</h4>
+                <div class="file-details">
+                    <div>
+                        <strong>Name:</strong><br>
+                        <span id="academicFileName">-</span>
+                    </div>
+                    <div>
+                        <strong>Size:</strong><br>
+                        <span id="academicFileSize">-</span>
+                    </div>
+                </div>
+
+                <button id="academicBtn" class="check-btn" disabled>
+                    🔍 Check Plagiarism (Step 1)
+                </button>
+            </div>
+
+            <div id="academicLoading" class="loading">
+                <div class="spinner"></div>
+                <p>Analyzing document with XAI...</p>
+                <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                    Running vector search, similarity check, and authenticity verification
+                </p>
+            </div>
+
+            <div id="academicResult" class="result"></div>
+        </div>
+
+        <!-- University Certificate Tab -->
+        <div id="universityTab" class="tab-content">
+            <h3>🎓 University Certificate Upload</h3>
+            <p style="margin: 10px 0; color: #666; font-size: 0.9em;">
+                Universities can upload authentic certificates to the trusted database. 
+                These will be used for verification by employers and other institutions.
+            </p>
+            
+            <div id="universityArea" class="upload-area">
+                <div class="upload-icon">🎓</div>
+                <h3>Upload Official Certificate</h3>
+                <p>Degree, Diploma, Certificate</p>
+                <input type="file" id="universityFileInput" class="file-input" accept=".pdf">
+            </div>
+
+            <div id="universityFileInfo" class="file-info">
+                <h4>Selected File:</h4>
+                <div class="file-details">
+                    <div>
+                        <strong>Name:</strong><br>
+                        <span id="universityFileName">-</span>
+                    </div>
+                    <div>
+                        <strong>Size:</strong><br>
+                        <span id="universityFileSize">-</span>
+                    </div>
+                </div>
+
+                <form id="universityForm">
+                    <input type="text" id="universityName" placeholder="University Name" required style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                    <input type="text" id="studentName" placeholder="Student Name" required style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                    <select id="certificateType" required style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                        <option value="">Select Certificate Type</option>
+                        <option value="degree">Degree</option>
+                        <option value="diploma">Diploma</option>
+                        <option value="certificate">Certificate</option>
+                    </select>
+                    <input type="date" id="issueDate" required style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                </form>
+
+                <button id="universityUploadBtn" class="check-btn" disabled>
+                    ✅ Upload to Trusted Database
+                </button>
+            </div>
+
+            <div id="universityLoading" class="loading">
+                <div class="spinner"></div>
+                <p>Uploading certificate...</p>
+            </div>
+
+            <div id="universityResult" class="result"></div>
+        </div>
+
+        <!-- Company Verification Tab -->
+        <div id="companyTab" class="tab-content">
+            <h3>🏢 Company Certificate Verification</h3>
+            <p style="margin: 10px 0; color: #666; font-size: 0.9em;">
+                Employers can verify certificates submitted by job applicants. 
+                The system will check against the trusted database and detect forgeries.
+            </p>
+            
+            <div id="companyArea" class="upload-area">
+                <div class="upload-icon">📋</div>
+                <h3>Upload Certificate to Verify</h3>
+                <p>Verify Authenticity</p>
+                <input type="file" id="companyFileInput" class="file-input" accept=".pdf">
+            </div>
+
+            <div id="companyFileInfo" class="file-info">
+                <h4>Selected File:</h4>
+                <div class="file-details">
+                    <div>
+                        <strong>Name:</strong><br>
+                        <span id="companyFileName">-</span>
+                    </div>
+                    <div>
+                        <strong>Size:</strong><br>
+                        <span id="companyFileSize">-</span>
+                    </div>
+                </div>
+
+                <form id="companyForm">
+                    <input type="text" id="companyName" placeholder="Company Name" required style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                    <input type="text" id="applicantName" placeholder="Applicant Name" required style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;">
+                </form>
+
+                <button id="companyVerifyBtn" class="check-btn" disabled>
+                    🔎 Verify Certificate
+                </button>
+            </div>
+
+            <div id="companyLoading" class="loading">
+                <div class="spinner"></div>
+                <p>Verifying certificate...</p>
+            </div>
+
+            <div id="companyResult" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000';
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                const tabName = tab.dataset.tab;
+                document.getElementById(`${tabName}Tab`).classList.add('active');
+            });
+        });
+
+        // Academic Paper Setup
+        let academicFile = null;
+        const academicArea = document.getElementById('academicArea');
+        const academicFileInput = document.getElementById('academicFileInput');
+        const academicFileInfo = document.getElementById('academicFileInfo');
+        const academicFileName = document.getElementById('academicFileName');
+        const academicFileSize = document.getElementById('academicFileSize');
+        const academicBtn = document.getElementById('academicBtn');
+        const academicLoading = document.getElementById('academicLoading');
+        const academicResult = document.getElementById('academicResult');
+
+        setupDragAndDrop(academicArea, academicFileInput, (file) => {
+            academicFile = file;
+            showFileInfo(file, academicFileInfo, academicFileName, academicFileSize);
+            academicBtn.disabled = false;
+            academicResult.classList.remove('show');
+        });
+
+        // Academic check button
+        academicBtn.addEventListener('click', async () => {
+            if (!academicFile) return;
+
+            const formData = new FormData();
+            formData.append('document', academicFile);
+            formData.append('documentType', 'research_paper');
+            formData.append('uploaderName', 'Anonymous');
+
+            academicBtn.disabled = true;
+            academicLoading.classList.add('show');
+            academicResult.classList.remove('show');
+            academicResult.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_URL}/api/document/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                academicLoading.classList.remove('show');
+                
+                if (response.ok && result.success) {
+                    displayIntegratedResults(result.data, academicResult);
+                } else {
+                    showResult(academicResult, 'error', 'Analysis Failed', result.error || 'Unknown error');
+                }
+            } catch (error) {
+                academicLoading.classList.remove('show');
+                showResult(academicResult, 'error', 'Analysis Failed', error.message);
+            } finally {
+                academicBtn.disabled = false;
+            }
+        });
+
+        function setupDragAndDrop(area, input, onFileSelect) {
+            area.addEventListener('click', () => input.click());
+
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.classList.add('dragover');
+            });
+
+            area.addEventListener('dragleave', () => {
+                area.classList.remove('dragover');
+            });
+
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.classList.remove('dragover');
+                
+                const file = e.dataTransfer.files[0];
+                if (file && file.type === 'application/pdf') {
+                    onFileSelect(file);
+                } else {
+                    alert('Please drop a PDF file');
+                }
+            });
+
+            input.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    onFileSelect(file);
+                }
+            });
+        }
+
+        function showFileInfo(file, infoDiv, nameDiv, sizeDiv) {
+            nameDiv.textContent = file.name;
+            sizeDiv.textContent = formatFileSize(file.size);
+            infoDiv.classList.add('show');
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        function showResult(resultDiv, type, title, message) {
+            resultDiv.className = `result show ${type}`;
+            resultDiv.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 10px; font-size: 1.1em;">${title}</div>
+                <div style="font-size: 0.95em; line-height: 1.6;">${message}</div>
+            `;
+        }
+
+        function displayIntegratedResults(data, resultDiv) {
+            resultDiv.className = 'result show';
+            resultDiv.innerHTML = '';
+
+            // Overall status header
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = 'text-align: center; padding: 20px; margin-bottom: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px;';
+            statusDiv.innerHTML = `
+                <div style="font-size: 2em; margin-bottom: 10px;">
+                    ${data.status === 'verified' ? '✅' : '⚠️'}
+                </div>
+                <div style="font-size: 1.5em; font-weight: 700; margin-bottom: 5px;">
+                    ${data.status === 'verified' ? 'DOCUMENT VERIFIED' : 'DOCUMENT NOT VERIFIED'}
+                </div>
+                <div style="font-size: 1em; opacity: 0.9;">
+                    ${data.message}
+                </div>
+            `;
+            resultDiv.appendChild(statusDiv);
+
+            // XAI Analysis Section
+            if (data.xaiAnalysis) {
+                displayXAIAnalysis(data.xaiAnalysis, resultDiv);
+            }
+
+            // Blockchain Section (only if verified)
+            if (data.status === 'verified' && data.blockchain) {
+                displayBlockchainInfo(data.blockchain, resultDiv);
+            } else if (data.status !== 'verified') {
+                const rejectionDiv = document.createElement('div');
+                rejectionDiv.style.cssText = 'margin-top: 20px; padding: 20px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px;';
+                rejectionDiv.innerHTML = `
+                    <h4 style="color: #856404; margin-bottom: 10px;">❌ Not Registered on Blockchain</h4>
+                    <p style="color: #856404; line-height: 1.6;">
+                        Document did not pass verification criteria and therefore was not registered on the blockchain. 
+                        Please review the XAI analysis above for detailed reasons.
+                    </p>
+                `;
+                resultDiv.appendChild(rejectionDiv);
+            }
+        }
+
+        function displayXAIAnalysis(xai, resultDiv) {
+            const xaiSection = document.createElement('div');
+            xaiSection.className = 'xai-section';
+            
+            let html = `
+                <div class="xai-header">
+                    🤖 XAI Analysis Results
+                </div>
+            `;
+
+            // Confidence meter
+            if (xai.confidenceScore !== undefined) {
+                html += `
+                    <div class="confidence-meter">
+                        <span style="font-weight: 600;">Confidence:</span>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${xai.confidenceScore}%"></div>
+                        </div>
+                        <span class="confidence-value">${xai.confidenceScore}%</span>
+                    </div>
+                `;
+            }
+
+            // Similarity Score
+            if (xai.similarityScore !== undefined) {
+                const similarityColor = xai.similarityScore > 75 ? '#dc3545' : 
+                                       xai.similarityScore > 30 ? '#ffc107' : '#28a745';
+                html += `
+                    <div style="background: white; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 600;">Overall Similarity:</span>
+                            <span style="font-size: 1.5em; font-weight: 700; color: ${similarityColor};">
+                                ${xai.similarityScore.toFixed(1)}%
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Plagiarism Status
+            if (xai.isPlagiarized !== undefined) {
+                html += `
+                    <div class="classification-badge ${xai.isPlagiarized ? 'high' : 'none'}">
+                        ${xai.isPlagiarized ? '❌ Plagiarism Detected' : '✅ Original Content'}
+                    </div>
+                `;
+            }
+
+            // AI Detection
+            if (xai.isAIGenerated !== undefined) {
+                html += `
+                    <div class="classification-badge ${xai.isAIGenerated ? 'medium' : 'none'}">
+                        ${xai.isAIGenerated ? '🤖 AI-Generated Content Detected' : '✍️ Human-Written Content'}
+                        ${xai.aiProbability !== undefined ? ` (${xai.aiProbability.toFixed(1)}% probability)` : ''}
+                    </div>
+                `;
+            }
+
+            // Detailed explanations
+            if (xai.explanation) {
+                html += `<div style="margin-top: 15px; padding: 15px; background: white; border-radius: 8px; line-height: 1.6;">
+                    ${xai.explanation}
+                </div>`;
+            }
+
+            // Matching parts (if plagiarism detected)
+            if (xai.matchingParts && xai.matchingParts.length > 0) {
+                html += `
+                    <div style="margin-top: 15px;">
+                        <h4 style="margin-bottom: 10px;">📍 Matching Sections Found:</h4>
+                        <div class="match-list">
+                            ${xai.matchingParts.map((part, idx) => `
+                                <div class="match-item">
+                                    <div style="font-weight: 600; margin-bottom: 8px;">Match ${idx + 1}</div>
+                                    <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.85em;">
+                                        "${part.substring(0, 200)}${part.length > 200 ? '...' : ''}"
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // AI indicators
+            if (xai.indicators && xai.indicators.length > 0) {
+                html += `
+                    <div class="alerts">
+                        <h4 style="margin-bottom: 10px;">🔍 AI Detection Indicators:</h4>
+                        ${xai.indicators.map(indicator => `
+                            <div class="alert-item">
+                                ℹ️ ${indicator}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            // Recommendations
+            if (xai.recommendations && xai.recommendations.length > 0) {
+                html += `
+                    <div class="recommendations">
+                        <h4>💡 Recommendations:</h4>
+                        <ul>
+                            ${xai.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            xaiSection.innerHTML = html;
+            resultDiv.appendChild(xaiSection);
+        }
+
+        function displayBlockchainInfo(blockchain, resultDiv) {
+            const blockchainSection = document.createElement('div');
+            blockchainSection.className = 'blockchain-section';
+            
+            blockchainSection.innerHTML = `
+                <div class="blockchain-header">
+                    ⛓️ Blockchain Registration Successful
+                </div>
+                
+                <div style="text-align: center; margin: 15px 0;">
+                    <span class="success-badge">✅ Registered on Immutable Ledger</span>
+                </div>
+
+                <div class="blockchain-status">
+                    <div class="blockchain-field">
+                        <div class="blockchain-label">Transaction Hash:</div>
+                        <div class="blockchain-value">${blockchain.transactionHash}</div>
+                    </div>
+                    <div class="blockchain-field">
+                        <div class="blockchain-label">Block Number:</div>
+                        <div class="blockchain-value">${blockchain.blockNumber}</div>
+                    </div>
+                    <div class="blockchain-field">
+                        <div class="blockchain-label">Contract Address:</div>
+                        <div class="blockchain-value">${blockchain.contractAddress}</div>
+                    </div>
+                    <div class="blockchain-field">
+                        <div class="blockchain-label">Document Hash:</div>
+                        <div class="blockchain-value">${blockchain.documentHash}</div>
+                    </div>
+                    <div class="blockchain-field">
+                        <div class="blockchain-label">Gas Used:</div>
+                        <div class="blockchain-value">${blockchain.gasUsed || 'N/A'}</div>
+                    </div>
+                    <div class="blockchain-field">
+                        <div class="blockchain-label">Timestamp:</div>
+                        <div class="blockchain-value">${new Date(blockchain.timestamp).toLocaleString()}</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #28a745;">
+                    <strong style="color: #28a745;">🔒 Immutable Proof Generated</strong><br>
+                    <span style="font-size: 0.9em; color: #666; line-height: 1.6;">
+                        This document is now permanently registered on the blockchain. 
+                        The verification data cannot be altered or deleted, providing tamper-proof evidence of authenticity.
+                    </span>
+                </div>
+            `;
+            
+            resultDiv.appendChild(blockchainSection);
+        }
+
+    </script>
+</body>
+</html>

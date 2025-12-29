@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html><head><title>Test</title></head>
+<body><h1>Server is Working!</h1>
+<script>
+fetch('/api/stats')
+  .then(r => r.json())
+  .then(d => document.body.innerHTML += '<pre>' + JSON.stringify(d, null, 2) + '</pre>')
+  .catch(e => document.body.innerHTML += '<p style="color:red">Error: ' + e + '</p>');
+</script>
+</body></html>

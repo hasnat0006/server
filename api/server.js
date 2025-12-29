@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
@@ -10,11 +11,15 @@ const blockchainConnector = require('./blockchain/connector');
 // const xaiAnalyzer = require('./xai/analyzer'); // Old simulated analyzer
 const xaiAnalyzer = require('./xai/real-analyzer'); // Real Python-based analyzer
 const dbHandler = require('./database/handler');
+const ChunkingService = require('./services/chunking-service');
 
 const execPromise = util.promisify(exec);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize chunking service
+let chunkingService = null;
 
 // Middleware
 app.use(cors());
@@ -96,13 +101,58 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
 
     console.log(`✅ Document saved to database with ID: ${documentRecord.id}`);
 
-    // Step 2: Perform XAI Analysis
+    // Step 2: Perform XAI Analysis (includes text extraction)
     console.log('🔍 Starting XAI analysis...');
     const xaiResults = await xaiAnalyzer.analyzeDocument(filePath, {
       documentId: documentRecord.id,
       documentType: documentType || 'research_paper',
       originalName: originalname
     });
+
+    // Step 2.5: Create chunks from extracted text
+    console.log('✂️  Creating document chunks for similarity search...');
+    try {
+      const documentText = xaiResults.documentText || '';
+      console.log(`📝 Extracted text length: ${documentText.length} characters`);
+      
+      if (documentText && documentText.length > 100) {
+        console.log(`✂️  Processing ${documentText.length} characters into chunks...`);
+        const chunks = await chunkingService.processDocument(documentRecord.id, documentText, {
+          original_name: originalname,
+          document_type: documentType,
+          file_hash: xaiResults.documentHash
+        });
+        console.log(`✅ Created ${chunks.length} chunks in database`);
+        
+        // Enhance plagiarism results with chunk-based matching
+        if (documentText.length > 500) {
+          console.log('🔍 Running chunk-based similarity search...');
+          const chunkMatches = await chunkingService.findSimilarChunks(documentText, documentRecord.id, 0.4);
+          
+          if (chunkMatches.length > 0) {
+            const aggregated = chunkingService.aggregateMatchesByDocument(chunkMatches);
+            console.log(`📊 Found ${aggregated.length} documents with similar content`);
+            
+            // Add to XAI results
+            xaiResults.chunkBasedMatches = aggregated.slice(0, 5); // Top 5 matches
+            
+            // Update plagiarism score if chunk matches found
+            if (aggregated.length > 0 && aggregated[0].average_similarity > 0.5) {
+              xaiResults.plagiarismCheck.similarityScore = Math.max(
+                xaiResults.plagiarismCheck.similarityScore,
+                aggregated[0].average_similarity * 100
+              );
+              xaiResults.plagiarismCheck.chunkMatches = aggregated.slice(0, 3);
+            }
+          }
+        }
+      } else {
+        console.warn('⚠️  No text extracted or text too short, skipping chunking');
+      }
+    } catch (chunkError) {
+      console.error('❌ Chunking error:', chunkError);
+      console.error('Stack:', chunkError.stack);
+    }
 
     console.log(`📊 XAI Analysis complete: ${xaiResults.status}`);
 
@@ -121,7 +171,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       console.log(`📍 Transaction hash: ${blockchainData.transactionHash}`);
     }
 
-    // Step 4: Update database with results
+    // Step 4: Update database with results (JSON + PostgreSQL)
     await dbHandler.updateDocument(documentRecord.id, {
       status: xaiResults.status,
       xaiResults: xaiResults,
@@ -224,6 +274,11 @@ async function startServer() {
     // Initialize database
     console.log('📦 Initializing database...');
     await dbHandler.initialize();
+    
+    // Initialize chunking service
+    console.log('✂️  Initializing chunking service...');
+    chunkingService = new ChunkingService(dbHandler);
+    console.log('✅ Chunking service ready');
     
     // Check blockchain connection
     console.log('⛓️  Checking blockchain connection...');

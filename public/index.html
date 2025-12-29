@@ -494,18 +494,7 @@
                     <span class="result-label">Document Hash:</span>
                     <span class="result-value hash-value">${data.xaiAnalysis.documentHash}</span>
                 </div>
-                <div class="result-item">
-                    <span class="result-label">Confidence Score:</span>
-                    <span class="result-value">${data.xaiAnalysis.confidenceScore}%</span>
-                </div>
-                <div class="result-item">
-                    <span class="result-label">Plagiarism Check:</span>
-                    <span class="result-value">${data.xaiAnalysis.plagiarismCheck.similarityScore}% similarity</span>
-                </div>
-                <div class="result-item">
-                    <span class="result-label">AI Detection:</span>
-                    <span class="result-value">${data.xaiAnalysis.aiDetection.aiProbability}% AI probability</span>
-                </div>
+        
             `;
 
             // Blockchain section
@@ -533,36 +522,36 @@
             }
 
             // Explanation
-            const explanationContent = document.getElementById('explanationContent');
-            const explanationClass = data.status === 'verified' ? 'success' : 'error';
-            let explanationHTML = `
-                <div class="explanation ${explanationClass}">
-                    <h4>${data.xaiAnalysis.explanation.summary}</h4>
-                    <ul style="margin-top: 10px; padding-left: 20px;">
-                        ${data.xaiAnalysis.explanation.details.map(detail => `<li>${detail}</li>`).join('')}
-                    </ul>
-                    <p style="margin-top: 10px;"><strong>Recommendation:</strong> ${data.xaiAnalysis.explanation.recommendation}</p>
-                </div>
-            `;
+            //const explanationContent = document.getElementById('explanationContent');
+            //const explanationClass = data.status === 'verified' ? 'success' : 'error';
+            // let explanationHTML = `
+            //     <div class="explanation ${explanationClass}">
+            //         <h4>${data.xaiAnalysis.explanation.summary}</h4>
+            //         <ul style="margin-top: 10px; padding-left: 20px;">
+            //             ${data.xaiAnalysis.explanation.details.map(detail => `<li>${detail}</li>`).join('')}
+            //         </ul>
+            //         <p style="margin-top: 10px;"><strong>Recommendation:</strong> ${data.xaiAnalysis.explanation.recommendation}</p>
+            //     </div>
+            // `;
 
             // Add matching parts if any
-            if (data.xaiAnalysis.explanation.matchingParts && data.xaiAnalysis.explanation.matchingParts.length > 0) {
-                explanationHTML += `
-                    <div class="matching-parts">
-                        <h4 style="margin-bottom: 10px;">📍 Matching Content Found:</h4>
-                        ${data.xaiAnalysis.explanation.matchingParts.map(part => `
-                            <div class="matching-part">
-                                <strong>Source:</strong> ${part.sourceDocument}<br>
-                                <strong>Similarity:</strong> ${part.similarityScore}%<br>
-                                <strong>Matched Text:</strong> "${part.matchedText}"<br>
-                                <em>${part.explanation}</em>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
+            // if (data.xaiAnalysis.explanation.matchingParts && data.xaiAnalysis.explanation.matchingParts.length > 0) {
+            //     explanationHTML += `
+            //         <div class="matching-parts">
+            //             <h4 style="margin-bottom: 10px;">📍 Matching Content Found:</h4>
+            //             ${data.xaiAnalysis.explanation.matchingParts.map(part => `
+            //                 <div class="matching-part">
+            //                     <strong>Source:</strong> ${part.sourceDocument}<br>
+            //                     <strong>Similarity:</strong> ${part.similarityScore}%<br>
+            //                     <strong>Matched Text:</strong> "${part.matchedText}"<br>
+            //                     <em>${part.explanation}</em>
+            //                 </div>
+            //             `).join('')}
+            //         </div>
+            //     `;
+            // }
 
-            explanationContent.innerHTML = explanationHTML;
+            // explanationContent.innerHTML = explanationHTML;
 
             // Reset for next upload
             setTimeout(() => {

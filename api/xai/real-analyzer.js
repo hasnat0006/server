@@ -20,13 +20,13 @@ class RealXAIAnalyzer {
       const documentHash = await this.calculateHash(filePath);
       console.log(`🔐 Document hash: ${documentHash}`);
 
-      // Step 2: Extract text content
-      const documentText = await this.extractText(filePath);
+      // Step 2: Extract text content (use provided text if available)
+      const documentText = metadata.documentText || await this.extractText(filePath);
       console.log(`📄 Extracted ${documentText.length} characters`);
 
-      // Step 3: Run real plagiarism check using Python
+      // Step 3: Run plagiarism check (will use chunk-based matching if available)
       console.log('🔎 Running plagiarism detection...');
-      const plagiarismResults = await this.runPlagiarismCheck(filePath, documentText);
+      const plagiarismResults = await this.runPlagiarismCheck(filePath, documentText, metadata.documentId);
 
       // Step 4: Check for AI-generated content using Python
       console.log('🤖 Checking for AI-generated content...');
@@ -42,6 +42,7 @@ class RealXAIAnalyzer {
       // Step 6: Combine results and determine status
       const analysis = this.combineResults({
         documentHash,
+        documentText, // Include text for chunking
         plagiarismResults,
         aiDetectionResults,
         forgeryResults,
@@ -209,7 +210,7 @@ class RealXAIAnalyzer {
     }
   }
 
-  combineResults({ documentHash, plagiarismResults, aiDetectionResults, forgeryResults, metadata }) {
+  combineResults({ documentHash, documentText, plagiarismResults, aiDetectionResults, forgeryResults, metadata }) {
     let status = 'verified';
     let rejectionReasons = [];
     let confidenceScore = 100;
@@ -255,6 +256,7 @@ class RealXAIAnalyzer {
 
     return {
       documentHash,
+      documentText, // Include for chunking
       status,
       confidenceScore,
       timestamp: new Date().toISOString(),

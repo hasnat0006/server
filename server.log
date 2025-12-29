@@ -1,0 +1,21 @@
+
+> thesis-blockchain-project@1.0.0 start
+> node api/server.js
+
+📦 Initializing database...
+✅ Database loaded: 39 documents
+⛓️  Checking blockchain connection...
+✅ XAI modules loaded successfully
+🔧 Integrated XAI Analyzer initialized
+✅ Blockchain connector initialized
+📍 Contract address: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+✅ Connected to blockchain at 0x5FbDB2315678afecb367f032d93F642f64180aa3
+
+========================================
+🚀 Server started successfully!
+========================================
+📡 API Server: http://localhost:3000
+🌐 Web Interface: http://localhost:3000
+📚 API Docs: http://localhost:3000/api/health
+========================================
+

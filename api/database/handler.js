@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const PostgreSQLHandler = require('./postgres-handler');
 
 class DatabaseHandler {
   constructor() {
@@ -8,6 +9,8 @@ class DatabaseHandler {
       documents: [],
       nextId: 1
     };
+    this.postgresHandler = null;
+    this.usePostgres = false;
   }
 
   async initialize() {
@@ -18,14 +21,29 @@ class DatabaseHandler {
         fs.mkdirSync(dataDir, { recursive: true });
       }
 
-      // Load existing data or create new file
+      // Load existing JSON data
       if (fs.existsSync(this.dbPath)) {
         const fileData = fs.readFileSync(this.dbPath, 'utf8');
         this.data = JSON.parse(fileData);
-        console.log(`✅ Database loaded: ${this.data.documents.length} documents`);
+        console.log(`✅ JSON Database loaded: ${this.data.documents.length} documents`);
       } else {
         this.save();
-        console.log('✅ Database initialized');
+        console.log('✅ JSON Database initialized');
+      }
+
+      // Try to initialize PostgreSQL if DATABASE_URL is set
+      if (process.env.DATABASE_URL) {
+        try {
+          this.postgresHandler = new PostgreSQLHandler();
+          await this.postgresHandler.initialize();
+          this.usePostgres = true;
+          console.log('✅ Using PostgreSQL (Neon DB) as primary database');
+        } catch (error) {
+          console.warn('⚠️  PostgreSQL not available, using JSON only:', error.message);
+          this.usePostgres = false;
+        }
+      } else {
+        console.log('ℹ️  DATABASE_URL not set, using JSON database only');
       }
 
       return true;
@@ -40,6 +58,36 @@ class DatabaseHandler {
   }
 
   async createDocument(documentData) {
+    // Create in PostgreSQL first if available
+    if (this.usePostgres && this.postgresHandler) {
+      try {
+        const pgDocument = await this.postgresHandler.createDocument(documentData);
+        console.log(`📊 Document saved to PostgreSQL with ID: ${pgDocument.id}`);
+        
+        // Sync with JSON - check if already exists
+        const existingIndex = this.data.documents.findIndex(doc => doc.id === pgDocument.id);
+        const document = {
+          id: pgDocument.id,
+          ...documentData,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        if (existingIndex >= 0) {
+          this.data.documents[existingIndex] = document;
+        } else {
+          this.data.documents.push(document);
+        }
+        this.data.nextId = Math.max(this.data.nextId, pgDocument.id + 1);
+        this.save();
+        
+        return pgDocument;
+      } catch (error) {
+        console.warn('⚠️  PostgreSQL insert failed, using JSON:', error.message);
+      }
+    }
+
+    // Fallback to JSON only
     const document = {
       id: this.data.nextId++,
       ...documentData,
@@ -54,6 +102,30 @@ class DatabaseHandler {
   }
 
   async updateDocument(id, updates) {
+    // Update PostgreSQL first if available
+    if (this.usePostgres && this.postgresHandler) {
+      try {
+        const pgDocument = await this.postgresHandler.updateDocument(id, updates);
+        console.log(`📊 Document updated in PostgreSQL: ${id}`);
+        
+        // Also update JSON
+        const index = this.data.documents.findIndex(doc => doc.id === parseInt(id));
+        if (index !== -1) {
+          this.data.documents[index] = {
+            ...this.data.documents[index],
+            ...updates,
+            updatedAt: new Date().toISOString()
+          };
+          this.save();
+        }
+        
+        return pgDocument;
+      } catch (error) {
+        console.warn('⚠️  PostgreSQL update failed, using JSON:', error.message);
+      }
+    }
+
+    // Fallback to JSON only
     const index = this.data.documents.findIndex(doc => doc.id === parseInt(id));
     
     if (index === -1) {
@@ -113,6 +185,28 @@ class DatabaseHandler {
       rejected,
       analyzing
     };
+  }
+
+  // Chunk operations - proxy to PostgreSQL
+  async createChunk(chunkData) {
+    if (this.usePostgres && this.postgresHandler) {
+      return await this.postgresHandler.createChunk(chunkData);
+    }
+    throw new Error('PostgreSQL not available for chunk operations');
+  }
+
+  async getChunks(documentId) {
+    if (this.usePostgres && this.postgresHandler) {
+      return await this.postgresHandler.getChunks(documentId);
+    }
+    return [];
+  }
+
+  async searchSimilarChunks(queryText, excludeDocumentId, limit) {
+    if (this.usePostgres && this.postgresHandler) {
+      return await this.postgresHandler.searchSimilarChunks(queryText, excludeDocumentId, limit);
+    }
+    return [];
   }
 }
 

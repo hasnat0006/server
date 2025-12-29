@@ -9,20 +9,29 @@ class PostgreSQLHandler {
 
   async initialize() {
     try {
-      // Database connection configuration
-      const config = {
-        user: process.env.DB_USER || 'postgres',
-        host: process.env.DB_HOST || 'localhost',
-        database: process.env.DB_NAME || 'document_verification',
-        password: process.env.DB_PASSWORD || 'postgres',
-        port: process.env.DB_PORT || 5432,
-      };
+      // Use DATABASE_URL if available (Neon DB format), otherwise use individual params
+      const config = process.env.DATABASE_URL 
+        ? {
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+          }
+        : {
+            user: process.env.DB_USER || 'postgres',
+            host: process.env.DB_HOST || 'localhost',
+            database: process.env.DB_NAME || 'document_verification',
+            password: process.env.DB_PASSWORD || 'postgres',
+            port: process.env.DB_PORT || 5432,
+          };
 
       this.pool = new Pool(config);
 
       // Test connection
       const client = await this.pool.connect();
-      console.log('✅ PostgreSQL connected successfully');
+      console.log('✅ PostgreSQL (Neon DB) connected successfully');
+      
+      // Create tables if they don't exist
+      await this.createTables(client);
+      
       client.release();
 
       return true;
@@ -32,30 +41,59 @@ class PostgreSQLHandler {
     }
   }
 
+  async createTables(client) {
+    // Tables already exist in Neon DB - skip creation
+    console.log('✅ Using existing Neon DB schema');
+  }
+
   async createDocument(documentData) {
     const client = await this.pool.connect();
     try {
+      // Map to Neon DB schema: id, filename, uploaded_at, doc_hash, num_pages, metadata, chunks
       const query = `
         INSERT INTO documents (
-          original_name, file_name, file_path, file_size,
-          document_type, uploader_name, status
+          filename, doc_hash, num_pages, metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4)
         RETURNING *
       `;
 
+      const metadata = {
+        original_name: documentData.originalName,
+        file_path: documentData.filePath,
+        file_size: documentData.fileSize,
+        document_type: documentData.documentType,
+        uploader_name: documentData.uploaderName || 'Anonymous',
+        status: documentData.status || 'analyzing'
+      };
+
       const values = [
-        documentData.originalName,
         documentData.fileName,
-        documentData.filePath,
-        documentData.fileSize,
-        documentData.documentType,
-        documentData.uploaderName || 'Anonymous',
-        documentData.status || 'analyzing'
+        documentData.documentHash || '',
+        0, // num_pages - will be updated later
+        JSON.stringify(metadata)
       ];
 
       const result = await client.query(query, values);
+      console.log(`✅ Document created in Neon DB with ID: ${result.rows[0].id}`);
       return result.rows[0];
+    } catch (error) {
+      console.error('❌ Error creating document in Neon DB:', error.message);
+      
+      // Check if it's a duplicate document
+      if (error.code === '23505' && error.constraint === 'documents_doc_hash_key') {
+        console.log('📋 Document already exists, fetching existing record...');
+        const existingDoc = await client.query(
+          'SELECT * FROM documents WHERE doc_hash = $1',
+          [documentData.documentHash || '']
+        );
+        if (existingDoc.rows.length > 0) {
+          console.log(`✅ Found existing document with ID: ${existingDoc.rows[0].id}`);
+          return existingDoc.rows[0];
+        }
+      }
+      
+      throw error;
     } finally {
       client.release();
     }
@@ -64,25 +102,52 @@ class PostgreSQLHandler {
   async updateDocument(id, updates) {
     const client = await this.pool.connect();
     try {
+      // Get current metadata
+      const getCurrentQuery = 'SELECT metadata FROM documents WHERE id = $1';
+      console.log(`🔍 Looking for document with ID: ${id} (type: ${typeof id})`);
+      const currentResult = await client.query(getCurrentQuery, [parseInt(id)]);
+      
+      if (currentResult.rows.length === 0) {
+        console.error(`❌ Document not found in Neon DB for ID: ${id}`);
+        throw new Error('Document not found');
+      }
+      
+      console.log(`✅ Found document in Neon DB: ${id}`);
+
+      const currentMetadata = currentResult.rows[0].metadata || {};
+
+      // Update metadata with new values
+      if (updates.status) {
+        currentMetadata.status = updates.status;
+      }
+
+      // Prepare update fields
       const updateFields = [];
       const values = [];
       let paramIndex = 1;
 
-      if (updates.status) {
-        updateFields.push(`status = $${paramIndex++}`);
-        values.push(updates.status);
-      }
-
       if (updates.documentHash) {
-        updateFields.push(`document_hash = $${paramIndex++}`);
+        updateFields.push(`doc_hash = $${paramIndex++}`);
         values.push(updates.documentHash);
       }
+
+      if (updates.xaiResults) {
+        currentMetadata.xai_results = updates.xaiResults;
+      }
+
+      if (updates.blockchainData) {
+        currentMetadata.blockchain_data = updates.blockchainData;
+      }
+
+      // Always update metadata
+      updateFields.push(`metadata = $${paramIndex++}`);
+      values.push(JSON.stringify(currentMetadata));
 
       values.push(id);
 
       const query = `
         UPDATE documents
-        SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+        SET ${updateFields.join(', ')}
         WHERE id = $${paramIndex}
         RETURNING *
       `;
@@ -94,131 +159,10 @@ class PostgreSQLHandler {
     }
   }
 
-  async saveXAIAnalysis(documentId, xaiResults) {
-    const client = await this.pool.connect();
-    try {
-      const query = `
-        INSERT INTO xai_analysis (
-          document_id, confidence_score,
-          is_plagiarized, plagiarism_similarity, plagiarism_threshold, plagiarism_details,
-          is_ai_generated, ai_probability, ai_threshold, ai_indicators,
-          is_forged, forgery_evidence,
-          rejection_reasons, explanation, raw_results
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        RETURNING *
-      `;
-
-      const values = [
-        documentId,
-        xaiResults.confidenceScore,
-        xaiResults.plagiarismCheck?.isPlagiarized || false,
-        xaiResults.plagiarismCheck?.similarityScore || 0,
-        xaiResults.plagiarismCheck?.threshold || 75,
-        JSON.stringify(xaiResults.plagiarismCheck || {}),
-        xaiResults.aiDetection?.isAIGenerated || false,
-        xaiResults.aiDetection?.aiProbability || 0,
-        xaiResults.aiDetection?.threshold || 60,
-        JSON.stringify(xaiResults.aiDetection?.indicators || []),
-        xaiResults.certificateForgery?.isForged || false,
-        JSON.stringify(xaiResults.certificateForgery || {}),
-        JSON.stringify(xaiResults.rejectionReasons || []),
-        JSON.stringify(xaiResults.explanation || {}),
-        JSON.stringify(xaiResults)
-      ];
-
-      const result = await client.query(query, values);
-
-      // Save matching parts if any
-      if (xaiResults.plagiarismCheck?.matchingParts) {
-        await this.saveMatchingParts(result.rows[0].id, xaiResults.plagiarismCheck.matchingParts);
-      }
-
-      return result.rows[0];
-    } finally {
-      client.release();
-    }
-  }
-
-  async saveMatchingParts(xaiAnalysisId, matchingParts) {
-    const client = await this.pool.connect();
-    try {
-      for (const part of matchingParts) {
-        const query = `
-          INSERT INTO matching_parts (
-            xai_analysis_id, source_document, matched_text,
-            similarity_score, length_words, explanation
-          )
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `;
-
-        const values = [
-          xaiAnalysisId,
-          part.sourceDocument || part.source_document,
-          part.matchedText || part.matched_text,
-          part.similarityScore || part.similarity_score,
-          part.lengthWords || part.length_words || 0,
-          part.explanation
-        ];
-
-        await client.query(query, values);
-      }
-    } finally {
-      client.release();
-    }
-  }
-
-  async saveBlockchainRecord(documentId, blockchainData) {
-    const client = await this.pool.connect();
-    try {
-      const query = `
-        INSERT INTO blockchain_records (
-          document_id, document_hash, contract_address,
-          transaction_hash, block_number, gas_used,
-          network, chain_id
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *
-      `;
-
-      const values = [
-        documentId,
-        blockchainData.documentHash,
-        blockchainData.contractAddress,
-        blockchainData.transactionHash,
-        blockchainData.blockNumber,
-        blockchainData.gasUsed,
-        'localhost',
-        1337
-      ];
-
-      const result = await client.query(query, values);
-      return result.rows[0];
-    } finally {
-      client.release();
-    }
-  }
-
   async getDocument(id) {
     const client = await this.pool.connect();
     try {
-      const query = `
-        SELECT 
-          d.*,
-          x.confidence_score,
-          x.is_plagiarized,
-          x.is_ai_generated,
-          x.is_forged,
-          x.explanation,
-          b.transaction_hash,
-          b.block_number,
-          b.contract_address
-        FROM documents d
-        LEFT JOIN xai_analysis x ON d.id = x.document_id
-        LEFT JOIN blockchain_records b ON d.id = b.document_id
-        WHERE d.id = $1
-      `;
-
+      const query = 'SELECT * FROM documents WHERE id = $1';
       const result = await client.query(query, [id]);
       return result.rows[0];
     } finally {
@@ -226,72 +170,135 @@ class PostgreSQLHandler {
     }
   }
 
-  async getDocuments({ status, limit = 50, offset = 0 }) {
+  async getAllDocuments() {
     const client = await this.pool.connect();
     try {
-      let query = `
-        SELECT * FROM document_summary
-      `;
-
-      const values = [];
-      let paramIndex = 1;
-
-      if (status) {
-        query += ` WHERE status = $${paramIndex++}`;
-        values.push(status);
-      }
-
-      query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex}`;
-      values.push(limit, offset);
-
-      const result = await client.query(query, values);
-
-      // Get total count
-      let countQuery = 'SELECT COUNT(*) FROM documents';
-      if (status) {
-        countQuery += ' WHERE status = $1';
-      }
-      const countResult = await client.query(countQuery, status ? [status] : []);
-
-      return {
-        documents: result.rows,
-        total: parseInt(countResult.rows[0].count),
-        limit: parseInt(limit),
-        offset: parseInt(offset)
-      };
+      const query = 'SELECT * FROM documents ORDER BY uploaded_at DESC';
+      const result = await client.query(query);
+      return result.rows;
     } finally {
       client.release();
     }
   }
 
-  async getStats() {
+  async deleteDocument(id) {
     const client = await this.pool.connect();
     try {
-      const query = 'SELECT * FROM verification_stats';
-      const result = await client.query(query);
+      // Delete chunks first (foreign key constraint)
+      await client.query('DELETE FROM chunks WHERE document_id = $1', [id]);
+      
+      const query = 'DELETE FROM documents WHERE id = $1 RETURNING *';
+      const result = await client.query(query, [id]);
       return result.rows[0];
     } finally {
       client.release();
     }
   }
 
-  async getKnownDocuments() {
+  // Chunk management methods
+  async createChunk(chunkData) {
     const client = await this.pool.connect();
     try {
-      const query = 'SELECT * FROM known_documents ORDER BY added_at DESC';
-      const result = await client.query(query);
+      const query = `
+        INSERT INTO chunks (
+          document_id, chunk_index, chunk_text, chunk_hash, token_count, embedding
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `;
+
+      const values = [
+        chunkData.document_id,
+        chunkData.chunk_index,
+        chunkData.chunk_text || chunkData.content,
+        chunkData.chunk_hash,
+        chunkData.token_count || (chunkData.chunk_text || chunkData.content).split(' ').filter(Boolean).length,
+        null // Skip embedding for now - requires OpenAI API for proper 768/1536 dimensions
+      ];
+
+      const result = await client.query(query, values);
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  async getChunks(documentId) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        SELECT * FROM chunks 
+        WHERE document_id = $1 
+        ORDER BY chunk_index ASC
+      `;
+      const result = await client.query(query, [documentId]);
       return result.rows;
     } finally {
       client.release();
     }
   }
 
-  async getKnownCertificates() {
+  async searchSimilarChunks(queryText, excludeDocumentId = null, limit = 10) {
     const client = await this.pool.connect();
     try {
-      const query = 'SELECT * FROM known_certificates ORDER BY added_at DESC';
-      const result = await client.query(query);
+      // Text similarity search using pg_trgm
+      let query = `
+        SELECT 
+          c.*,
+          d.filename,
+          d.metadata as doc_metadata,
+          similarity(c.chunk_text, $1) as similarity_score
+        FROM chunks c
+        JOIN documents d ON c.document_id = d.id
+        WHERE similarity(c.chunk_text, $1) > 0.3
+      `;
+      
+      const values = [queryText];
+      
+      if (excludeDocumentId) {
+        query += ` AND c.document_id != $2`;
+        values.push(excludeDocumentId);
+        query += ` ORDER BY similarity_score DESC LIMIT $3`;
+        values.push(limit);
+      } else {
+        query += ` ORDER BY similarity_score DESC LIMIT $2`;
+        values.push(limit);
+      }
+      
+      const result = await client.query(query, values);
       return result.rows;
+    } catch (error) {
+      console.warn('⚠️  Similarity search failed:', error.message);
+      // Fallback: Simple text search
+      let fallbackQuery = `
+        SELECT c.*, d.filename, d.metadata as doc_metadata
+        FROM chunks c
+        JOIN documents d ON c.document_id = d.id
+      `;
+      const fallbackValues = [];
+      
+      if (excludeDocumentId) {
+        fallbackQuery += ` WHERE c.document_id != $1`;
+        fallbackValues.push(excludeDocumentId);
+        fallbackQuery += ` ORDER BY c.id DESC LIMIT $2`;
+        fallbackValues.push(limit);
+      } else {
+        fallbackQuery += ` ORDER BY c.id DESC LIMIT $1`;
+        fallbackValues.push(limit);
+      }
+      
+      const result = await client.query(fallbackQuery, fallbackValues);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteChunks(documentId) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'DELETE FROM chunks WHERE document_id = $1';
+      await client.query(query, [documentId]);
     } finally {
       client.release();
     }
@@ -300,12 +307,10 @@ class PostgreSQLHandler {
   async close() {
     if (this.pool) {
       await this.pool.end();
-      console.log('PostgreSQL connection closed');
     }
   }
 }
 
-// Create singleton instance
-const postgresHandler = new PostgreSQLHandler();
+module.exports = PostgreSQLHandler;
 
-module.exports = postgresHandler;
+module.exports = PostgreSQLHandler;
