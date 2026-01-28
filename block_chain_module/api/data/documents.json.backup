@@ -1,0 +1,568 @@
+{
+  "documents": [
+    {
+      "id": 1,
+      "originalName": "Detecting AI Generated Text.pdf",
+      "fileName": "document-1767466157328-529800862.pdf",
+      "filePath": "/home/engr/thesis/server/integrated_app/uploads/document-1767466157328-529800862.pdf",
+      "fileSize": 920572,
+      "documentType": "research_paper",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "createdAt": "2026-01-03T18:49:17.348Z",
+      "updatedAt": "2026-01-03T18:49:17.855Z",
+      "xaiResults": {
+        "documentHash": "0x845470d01047638b946cf9a528fa2c37f755feb37ec2d9530d682a8c24e54e47",
+        "documentText": "Sample text extracted from PDF: document-1767466157328-529800862.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2026-01-03T18:49:17.513Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 8.386278693775347,
+          "threshold": 0.7,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 35,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 98.7%), typical of AI generation"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (65.0% confidence). Shows natural human writing patterns with good diversity and authenticity."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 8.4% similarity (below 0.7% threshold)",
+            "✅ AI detection: 35.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 1,
+          "documentType": "research_paper",
+          "originalName": "Detecting AI Generated Text.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0x845470d01047638b946cf9a528fa2c37f755feb37ec2d9530d682a8c24e54e47",
+        "transactionHash": "0xb06a1e4f8069d49e05a82a7655ce379851fffe1dc63d71fcfad2c680a46127ff",
+        "blockNumber": 57,
+        "gasUsed": "129230",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0x845470d01047638b946cf9a528fa2c37f755feb37ec2d9530d682a8c24e54e47"
+    },
+    {
+      "id": 2,
+      "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf",
+      "fileName": "document-1767466180383-394334165.pdf",
+      "filePath": "/home/engr/thesis/server/integrated_app/uploads/document-1767466180383-394334165.pdf",
+      "fileSize": 902983,
+      "documentType": "research_paper",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "createdAt": "2026-01-03T18:49:40.401Z",
+      "updatedAt": "2026-01-03T18:49:40.804Z",
+      "xaiResults": {
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "documentText": "Sample text extracted from PDF: document-1767466180383-394334165.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2026-01-03T18:49:40.554Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 8.386278693775347,
+          "threshold": 0.7,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 35,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 98.7%), typical of AI generation"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (65.0% confidence). Shows natural human writing patterns with good diversity and authenticity."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 8.4% similarity (below 0.7% threshold)",
+            "✅ AI detection: 35.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 2,
+          "documentType": "research_paper",
+          "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "transactionHash": "0x3269305bea2a291fcea6898423db9ce07c129e5e5a1e546453ec87dabc2a6539",
+        "blockNumber": 60,
+        "gasUsed": "133120",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b"
+    },
+    {
+      "id": 3,
+      "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf",
+      "fileName": "document-1767466301779-196052172.pdf",
+      "filePath": "/home/engr/thesis/server/integrated_app/uploads/document-1767466301779-196052172.pdf",
+      "fileSize": 902983,
+      "documentType": "research_paper",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "createdAt": "2026-01-03T18:51:41.790Z",
+      "updatedAt": "2026-01-03T18:51:42.155Z",
+      "xaiResults": {
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "documentText": "Sample text extracted from PDF: document-1767466301779-196052172.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2026-01-03T18:51:41.910Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 8.386278693775347,
+          "threshold": 0.7,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 35,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 98.7%), typical of AI generation"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (65.0% confidence). Shows natural human writing patterns with good diversity and authenticity."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 8.4% similarity (below 0.7% threshold)",
+            "✅ AI detection: 35.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 3,
+          "documentType": "research_paper",
+          "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "transactionHash": "0x476033169a51b10469b87c0dd775b166595802fe455aeac3f8658adbf9002dd4",
+        "blockNumber": 63,
+        "gasUsed": "133120",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b"
+    },
+    {
+      "id": 65,
+      "originalName": "Detecting AI Generated Text.pdf",
+      "fileName": "document-1767466563483-322763224.pdf",
+      "filePath": "/home/engr/thesis/server/integrated_app/uploads/document-1767466563483-322763224.pdf",
+      "fileSize": 920572,
+      "documentType": "research_paper",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "createdAt": "2026-01-03T18:56:05.549Z",
+      "updatedAt": "2026-01-03T18:56:06.625Z",
+      "xaiResults": {
+        "documentHash": "0x845470d01047638b946cf9a528fa2c37f755feb37ec2d9530d682a8c24e54e47",
+        "documentText": "Sample text extracted from PDF: document-1767466563483-322763224.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2026-01-03T18:56:05.690Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 8.386278693775347,
+          "threshold": 0.7,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 35,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 98.7%), typical of AI generation"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (65.0% confidence). Shows natural human writing patterns with good diversity and authenticity."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 8.4% similarity (below 0.7% threshold)",
+            "✅ AI detection: 35.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 65,
+          "documentType": "research_paper",
+          "originalName": "Detecting AI Generated Text.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0x845470d01047638b946cf9a528fa2c37f755feb37ec2d9530d682a8c24e54e47",
+        "transactionHash": "0x97acc28f6477793e4d798422fcf54e61fed9bd43c5d70d334238bf0b421addb3",
+        "blockNumber": 66,
+        "gasUsed": "129260",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0x845470d01047638b946cf9a528fa2c37f755feb37ec2d9530d682a8c24e54e47"
+    },
+    {
+      "id": 66,
+      "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf",
+      "fileName": "document-1767466576968-670239105.pdf",
+      "filePath": "/home/engr/thesis/server/integrated_app/uploads/document-1767466576968-670239105.pdf",
+      "fileSize": 902983,
+      "documentType": "research_paper",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "createdAt": "2026-01-03T18:56:18.855Z",
+      "updatedAt": "2026-01-03T18:56:19.780Z",
+      "xaiResults": {
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "documentText": "Sample text extracted from PDF: document-1767466576968-670239105.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2026-01-03T18:56:18.983Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 8.386278693775347,
+          "threshold": 0.7,
+          "matchingParts": [],
+          "explanation": "No significant plagiarism detected"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 35,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 98.7%), typical of AI generation"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (65.0% confidence). Shows natural human writing patterns with good diversity and authenticity."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 8.4% similarity (below 0.7% threshold)",
+            "✅ AI detection: 35.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 66,
+          "documentType": "research_paper",
+          "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf"
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "transactionHash": "0xbe7f9cf01010146c60e1667faa32418c578423c53c5a63a1c6e1c2507feb0696",
+        "blockNumber": 69,
+        "gasUsed": "133150",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b"
+    },
+    {
+      "id": 67,
+      "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf",
+      "fileName": "document-1767467050513-573479885.pdf",
+      "filePath": "/home/engr/thesis/server/integrated_app/uploads/document-1767467050513-573479885.pdf",
+      "fileSize": 902983,
+      "documentType": "research_paper",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "createdAt": "2026-01-03T19:04:12.521Z",
+      "updatedAt": "2026-01-03T19:04:13.953Z",
+      "xaiResults": {
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "documentText": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+        "status": "verified",
+        "confidenceScore": 90,
+        "timestamp": "2026-01-03T19:04:12.663Z",
+        "plagiarismCheck": {
+          "isPlagiarized": true,
+          "similarityScore": 73.4375,
+          "threshold": 60,
+          "matchingParts": [],
+          "chunkMatches": [
+            {
+              "document_id": 66,
+              "source_document": "document-1767466576968-670239105.pdf",
+              "matches": [
+                {
+                  "query_chunk": {
+                    "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                  },
+                  "matched_chunk": {
+                    "content": "Sample text extracted from PDF: document-1767466576968-670239105.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                    "chunk_hash": "254de850b9d5d99aad817298e4b9854dba36eade8f8b9d009d97f33a4ab6d025"
+                  },
+                  "similarity": 0.734375,
+                  "source_document": "document-1767466576968-670239105.pdf",
+                  "document_id": 66
+                }
+              ],
+              "total_similarity": 0.734375,
+              "match_count": 1,
+              "average_similarity": 0.734375
+            },
+            {
+              "document_id": 65,
+              "source_document": "document-1767466563483-322763224.pdf",
+              "matches": [
+                {
+                  "query_chunk": {
+                    "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                  },
+                  "matched_chunk": {
+                    "content": "Sample text extracted from PDF: document-1767466563483-322763224.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                    "chunk_hash": "be33aad3edabfd1b3110409e148794938a4049cd2a3a75d88ca8bb0d28d0cab0"
+                  },
+                  "similarity": 0.7265625,
+                  "source_document": "document-1767466563483-322763224.pdf",
+                  "document_id": 65
+                }
+              ],
+              "total_similarity": 0.7265625,
+              "match_count": 1,
+              "average_similarity": 0.7265625
+            },
+            {
+              "document_id": 26,
+              "source_document": "document-1766976828688-364246323.pdf",
+              "matches": [
+                {
+                  "query_chunk": {
+                    "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                  },
+                  "matched_chunk": {
+                    "content": "Sample text extracted from PDF: document-1766977328287-802097459.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                    "chunk_hash": "8a464c2cb8edae4b8097f300bc32d9644c4f3b324b436607f9c2fde8e2e96a66"
+                  },
+                  "similarity": 0.6818182,
+                  "source_document": "document-1766976828688-364246323.pdf",
+                  "document_id": 26
+                },
+                {
+                  "query_chunk": {
+                    "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                  },
+                  "matched_chunk": {
+                    "content": "Sample text extracted from PDF: document-1766977336851-241699417.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                    "chunk_hash": "5668b4f00ba229c6f7eb4ef218996f43900a361e0f0b6c8f65d4571fba943209"
+                  },
+                  "similarity": 0.6818182,
+                  "source_document": "document-1766976828688-364246323.pdf",
+                  "document_id": 26
+                }
+              ],
+              "total_similarity": 1.3636364,
+              "match_count": 2,
+              "average_similarity": 0.6818182
+            }
+          ],
+          "explanation": "Document contains 73.4% similar content from database",
+          "comparisonMethod": "database-chunk-based"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 35,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 98.7%), typical of AI generation"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (65.0% confidence). Shows natural human writing patterns with good diversity and authenticity."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 8.4% similarity (below 0.7% threshold)",
+            "✅ AI detection: 35.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": 67,
+          "documentType": "research_paper",
+          "originalName": "Explainable_AI_In_Education__Current_Trends_Challenges_And_Opportunities.pdf"
+        },
+        "chunkBasedMatches": [
+          {
+            "document_id": 66,
+            "source_document": "document-1767466576968-670239105.pdf",
+            "matches": [
+              {
+                "query_chunk": {
+                  "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                },
+                "matched_chunk": {
+                  "content": "Sample text extracted from PDF: document-1767466576968-670239105.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                  "chunk_hash": "254de850b9d5d99aad817298e4b9854dba36eade8f8b9d009d97f33a4ab6d025"
+                },
+                "similarity": 0.734375,
+                "source_document": "document-1767466576968-670239105.pdf",
+                "document_id": 66
+              }
+            ],
+            "total_similarity": 0.734375,
+            "match_count": 1,
+            "average_similarity": 0.734375
+          },
+          {
+            "document_id": 65,
+            "source_document": "document-1767466563483-322763224.pdf",
+            "matches": [
+              {
+                "query_chunk": {
+                  "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                },
+                "matched_chunk": {
+                  "content": "Sample text extracted from PDF: document-1767466563483-322763224.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                  "chunk_hash": "be33aad3edabfd1b3110409e148794938a4049cd2a3a75d88ca8bb0d28d0cab0"
+                },
+                "similarity": 0.7265625,
+                "source_document": "document-1767466563483-322763224.pdf",
+                "document_id": 65
+              }
+            ],
+            "total_similarity": 0.7265625,
+            "match_count": 1,
+            "average_similarity": 0.7265625
+          },
+          {
+            "document_id": 26,
+            "source_document": "document-1766976828688-364246323.pdf",
+            "matches": [
+              {
+                "query_chunk": {
+                  "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                },
+                "matched_chunk": {
+                  "content": "Sample text extracted from PDF: document-1766977328287-802097459.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                  "chunk_hash": "8a464c2cb8edae4b8097f300bc32d9644c4f3b324b436607f9c2fde8e2e96a66"
+                },
+                "similarity": 0.6818182,
+                "source_document": "document-1766976828688-364246323.pdf",
+                "document_id": 26
+              },
+              {
+                "query_chunk": {
+                  "content": "Sample text extracted from PDF: document-1767467050513-573479885.pdf\n\nThis is placeholder text. In production, use a PDF parser library."
+                },
+                "matched_chunk": {
+                  "content": "Sample text extracted from PDF: document-1766977336851-241699417.pdf\n\nThis is placeholder text. In production, use a PDF parser library.",
+                  "chunk_hash": "5668b4f00ba229c6f7eb4ef218996f43900a361e0f0b6c8f65d4571fba943209"
+                },
+                "similarity": 0.6818182,
+                "source_document": "document-1766976828688-364246323.pdf",
+                "document_id": 26
+              }
+            ],
+            "total_similarity": 1.3636364,
+            "match_count": 2,
+            "average_similarity": 0.6818182
+          }
+        ]
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b",
+        "transactionHash": "0xce89ab0055f6b2019f85ce2d4219ca801227756236f8c7eb023cd549a9ae60af",
+        "blockNumber": 72,
+        "gasUsed": "340570",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      },
+      "documentHash": "0xc2a1e1b2662a0cd10e4510667b1f73bc83b7924e98075800481abbb5346f089b"
+    }
+  ],
+  "nextId": 68
+}

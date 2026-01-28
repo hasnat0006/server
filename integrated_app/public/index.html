@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Verification Platform - Blockchain + XAI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            margin-bottom: 30px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 10px;
+        }
+
+        .status-item {
+            text-align: center;
+        }
+
+        .status-icon {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .status-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .status-value {
+            font-weight: 600;
+            color: #333;
+            margin-top: 5px;
+        }
+
+        .upload-section {
+            padding: 30px;
+            background: #fafafa;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 15px;
+            padding: 50px 20px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            background: white;
+        }
+
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        .upload-text {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            font-size: 0.9em;
+            color: #999;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .form-group {
+            margin: 20px 0;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: #2e7d32;
+            margin-bottom: 5px;
+        }
+
+        .file-size {
+            font-size: 0.9em;
+            color: #558b2f;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            margin-top: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #666;
+            font-size: 1em;
+            margin-top: 10px;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 30px;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+            animation: slideIn 0.5s;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result.success {
+            background: #d4edda;
+            border: 2px solid #c3e6cb;
+        }
+
+        .result.warning {
+            background: #fff3cd;
+            border: 2px solid #ffeaa7;
+        }
+
+        .result.error {
+            background: #f8d7da;
+            border: 2px solid #f5c6cb;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .result-icon {
+            font-size: 3em;
+            margin-right: 15px;
+        }
+
+        .result-title {
+            font-size: 1.8em;
+            font-weight: 700;
+        }
+
+        .result.success .result-icon { color: #28a745; }
+        .result.success .result-title { color: #155724; }
+        .result.warning .result-icon { color: #ffc107; }
+        .result.warning .result-title { color: #856404; }
+        .result.error .result-icon { color: #dc3545; }
+        .result.error .result-title { color: #721c24; }
+
+        .result-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+
+        .result-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-label {
+            font-size: 0.85em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .score-bar {
+            margin: 20px 0;
+        }
+
+        .score-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .score-progress {
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .score-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745 0%, #ffc107 50%, #dc3545 100%);
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-weight: 700;
+        }
+
+        .blockchain-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+
+        .blockchain-badge::before {
+            content: '⛓️ ';
+            margin-right: 5px;
+        }
+
+        .tx-hash {
+            font-family: monospace;
+            background: #f8f9ff;
+            padding: 10px;
+            border-radius: 5px;
+            word-break: break-all;
+            font-size: 0.9em;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .match-list {
+            margin-top: 15px;
+        }
+
+        .match-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .match-score {
+            font-weight: 700;
+            color: #dc3545;
+            font-size: 1.2em;
+        }
+
+        .match-document {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge.danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Document Verification Platform</h1>
+            <p>Blockchain-Powered Document Verification with Explainable AI</p>
+        </div>
+
+        <div class="main-card">
+            <!-- Status Bar -->
+            <!-- <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-icon">⛓️</div>
+                    <div class="status-label">Blockchain</div>
+                    <div class="status-value" id="blockchainStatus">Checking...</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-icon">🤖</div>
+                    <div class="status-label">XAI Analysis</div>
+                    <div class="status-value">Active</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-icon">💾</div>
+                    <div class="status-label">Database</div>
+                    <div class="status-value">Ready</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-icon">📄</div>
+                    <div class="status-label">Documents</div>
+                    <div class="status-value" id="totalDocs">0</div>
+                </div>
+            </div> -->
+
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #333;">📤 Upload Document for Verification</h2>
+                    <!-- <button onclick="showDocumentList()" 
+                            style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                   color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        📋 Manage Documents
+                    </button> -->
+                </div>
+                
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📄</div>
+                    <div class="upload-text">Click to select or drag & drop your document</div>
+                    <div class="upload-hint">Supported formats: PDF, DOC, DOCX, TXT, RTF, ODT, PPT, PPTX, XLS, XLSX, CSV, HTML, MD (Max 50MB)</div>
+                    <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.ppt,.pptx,.xls,.xlsx,.csv,.html,.htm,.md,.tex">
+                </div>
+
+                <div class="file-info" id="fileInfo">
+                    <div class="file-name" id="fileName"></div>
+                    <div class="file-size" id="fileSize"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="documentType">Document Type</label>
+                    <select id="documentType">
+                        <option value="research_paper">Research Paper</option>
+                        <option value="thesis">Thesis</option>
+                        <option value="certificate">Certificate</option>
+                        <option value="legal">Legal Document</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="uploaderName">Your Name (Optional)</label>
+                    <input type="text" id="uploaderName" placeholder="Enter your name">
+                </div>
+
+                <button class="btn" id="uploadBtn" disabled>
+                    🚀 Analyze & Verify Document
+                </button>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <div class="loading-text" id="loadingText">Uploading and analyzing document...</div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="result" id="result">
+                <div class="result-header">
+                    <div class="result-icon" id="resultIcon">✅</div>
+                    <div class="result-title" id="resultTitle">Document Verified!</div>
+                </div>
+
+                <!-- XAI Analysis Results -->
+                <div class="result-section">
+                    <h3>🤖 Explainable AI Analysis</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Status</div>
+                            <div class="info-value" id="xaiStatus">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Confidence Score</div>
+                            <div class="info-value" id="xaiConfidence">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Document Hash</div>
+                            <div class="info-value" id="docHash" style="font-size: 0.8em; word-break: break-all;">-</div>
+                        </div>
+                    </div>
+
+                    <!-- AI Detection -->
+                    <div class="score-bar">
+                        <div class="score-label">
+                            <span>🤖 AI-Generated Content</span>
+                            <span id="aiScore">-</span>
+                        </div>
+                        <div class="score-progress">
+                            <div class="score-fill" id="aiScoreFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Plagiarism Detection -->
+                    <div class="score-bar">
+                        <div class="score-label">
+                            <span>📝 Plagiarism Detection</span>
+                            <span id="plagiarismScore">-</span>
+                        </div>
+                        <div class="score-progress">
+                            <div class="score-fill" id="plagiarismScoreFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Forgery Detection -->
+                    <div class="score-bar">
+                        <div class="score-label">
+                            <span>🔍 Forgery Detection</span>
+                            <span id="forgeryScore">-</span>
+                        </div>
+                        <div class="score-progress">
+                            <div class="score-fill" id="forgeryScoreFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div id="matchesContainer"></div>
+                </div>
+
+                <!-- Blockchain Results -->
+                <div class="result-section" id="blockchainSection" style="display: none;">
+                    <h3>⛓️ Blockchain Registration</h3>
+                    <div class="blockchain-badge" id="blockchainBadge">Registered on Blockchain</div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Transaction Hash</div>
+                            <div class="tx-hash" id="txHash">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Block Number</div>
+                            <div class="info-value" id="blockNumber">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Timestamp</div>
+                            <div class="info-value" id="timestamp">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Management Modal -->
+    <div id="documentModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                                     background: rgba(0,0,0,0.7); z-index: 1000; padding: 20px; overflow-y: auto;">
+        <div style="max-width: 1200px; margin: 40px auto; background: white; border-radius: 15px; padding: 30px; position: relative;">
+            <button onclick="closeDocumentList()" 
+                    style="position: absolute; top: 15px; right: 15px; padding: 10px 20px; background: #dc3545; 
+                           color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                ✕ Close
+            </button>
+            
+            <h2 style="margin: 0 0 25px 0; color: #333;">📋 Document Management</h2>
+            
+            <div id="documentList" style="margin-top: 20px;">
+                <div style="text-align: center; padding: 40px; color: #666;">
+                    <div class="spinner" style="margin: 0 auto 20px;"></div>
+                    Loading documents...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const loading = document.getElementById('loading');
+        const loadingText = document.getElementById('loadingText');
+        const result = document.getElementById('result');
+
+        let selectedFile = null;
+
+        // Check server status on load
+        checkServerStatus();
+
+        // Click to upload
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // File selection
+        fileInput.addEventListener('change', (e) => {
+            handleFileSelection(e.target.files[0]);
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFileSelection(e.dataTransfer.files[0]);
+        });
+
+        // Handle file selection
+        function handleFileSelection(file) {
+            if (!file) return;
+
+            selectedFile = file;
+            fileName.textContent = `📄 ${file.name}`;
+            fileSize.textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
+            fileInfo.classList.add('show');
+            uploadBtn.disabled = false;
+        }
+
+        // Upload button click
+        uploadBtn.addEventListener('click', uploadDocument);
+
+        async function uploadDocument() {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('document', selectedFile);
+            formData.append('documentType', document.getElementById('documentType').value);
+            formData.append('uploaderName', document.getElementById('uploaderName').value);
+
+            uploadBtn.disabled = true;
+            loading.classList.add('show');
+            result.classList.remove('show');
+
+            try {
+                loadingText.textContent = '📤 Uploading document...';
+                
+                const response = await fetch('/api/document/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data.data);
+                } else {
+                    // Handle rejection errors (duplicate or high similarity)
+                    if (data.error === 'Duplicate file detected') {
+                        displayRejectionError('duplicate', data);
+                    } else if (data.error === 'Upload rejected - High similarity detected') {
+                        displayRejectionError('similarity', data);
+                    } else {
+                        displayError(data.error || 'Upload failed');
+                    }
+                }
+            } catch (error) {
+                displayError(error.message);
+            } finally {
+                loading.classList.remove('show');
+                uploadBtn.disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            const xai = data.xaiAnalysis;
+            const blockchain = data.blockchain;
+
+            // Set result type
+            if (xai.status === 'verified') {
+                result.className = 'result success show';
+                document.getElementById('resultIcon').textContent = '✅';
+                document.getElementById('resultTitle').textContent = 'Document Verified!';
+            } else if (xai.status === 'rejected') {
+                result.className = 'result error show';
+                document.getElementById('resultIcon').textContent = '🚫';
+                document.getElementById('resultTitle').textContent = 'Document Rejected - High Similarity';
+            } else if (xai.status === 'warning') {
+                result.className = 'result warning show';
+                document.getElementById('resultIcon').textContent = '⚠️';
+                document.getElementById('resultTitle').textContent = 'Verification Warning';
+            } else {
+                result.className = 'result error show';
+                document.getElementById('resultIcon').textContent = '❌';
+                document.getElementById('resultTitle').textContent = 'Verification Failed';
+            }
+
+            // XAI Analysis
+            document.getElementById('xaiStatus').textContent = xai.status.toUpperCase();
+            document.getElementById('xaiConfidence').textContent = xai.confidenceScore + '%';
+            document.getElementById('docHash').textContent = xai.documentHash;
+
+            // AI Detection Score
+            const aiScore = xai.aiDetection?.probabilityScore || 0;
+            document.getElementById('aiScore').textContent = aiScore.toFixed(1) + '%';
+            document.getElementById('aiScoreFill').style.width = aiScore + '%';
+
+            // Plagiarism Score
+            const plagScore = xai.plagiarismCheck?.similarityScore || 0;
+            document.getElementById('plagiarismScore').textContent = plagScore.toFixed(1) + '%';
+            document.getElementById('plagiarismScoreFill').style.width = plagScore + '%';
+
+            // Forgery Score
+            const forgeryScore = xai.forgeryDetection?.riskScore || 0;
+            document.getElementById('forgeryScore').textContent = forgeryScore.toFixed(1) + '%';
+            document.getElementById('forgeryScoreFill').style.width = forgeryScore + '%';
+
+            // Display fuzzy matches if any
+            if (xai.fuzzyMatchResults && xai.fuzzyMatchResults.totalMatches > 0) {
+                const fuzzyResults = xai.fuzzyMatchResults;
+                const matchesHTML = `
+                    <div style="margin-top: 25px; padding: 20px; background: #e8f4fd; border-radius: 10px; border: 2px solid #4a90e2;">
+                        <h3 style="margin: 0 0 15px 0; color: #2c5282; display: flex; align-items: center; gap: 10px;">
+                            <span>🔍</span> Fuzzy Matches Found
+                        </h3>
+                        
+                        ${fuzzyResults.documents.map((doc, docIdx) => `
+                            <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                <div style="margin-bottom: 12px;">
+                                    <div style="font-weight: 600; font-size: 1.05em; color: #333; margin-bottom: 5px;">
+                                        Document: ${doc.documentName}
+                                    </div>
+                                    <div style="display: flex; gap: 15px; font-size: 0.9em; color: #666;">
+                                        <span><strong>Document ID:</strong> ${doc.documentId}</span>
+                                        <span><strong>Similar Sections:</strong> ${doc.similarSections}</span>
+                                        <span><strong>Average Similarity:</strong> <span style="color: #e67e22; font-weight: 600;">${doc.averageSimilarity}</span></span>
+                                    </div>
+                                </div>
+                                
+                                <button onclick="toggleSections('doc${docIdx}')" 
+                                        style="padding: 8px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                               color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;">
+                                    📄 View Similar Sections
+                                </button>
+                                
+                                <div id="doc${docIdx}" style="display: none; margin-top: 15px;">
+                                    ${doc.matches.slice(0, 5).map((match, matchIdx) => `
+                                        <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid ${match.similarity > 0.6 ? '#dc3545' : match.similarity > 0.4 ? '#ffc107' : '#28a745'};">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                                <span style="font-weight: 600; color: #333;">Match #${matchIdx + 1}</span>
+                                                <span style="background: ${match.similarity > 0.6 ? '#dc3545' : match.similarity > 0.4 ? '#ffc107' : '#28a745'}; 
+                                                             color: white; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.9em;">
+                                                    ${(match.similarity * 100).toFixed(1)}% Similar
+                                                </span>
+                                            </div>
+                                            
+                                            <details style="margin-top: 10px;">
+                                                <summary style="cursor: pointer; font-weight: 600; color: #4a90e2; margin-bottom: 10px;">
+                                                    📝 Matched Document (Section ${match.matchedSection}):
+                                                </summary>
+                                                <div style="background: #fff3cd; padding: 12px; border-radius: 5px; margin-top: 10px; border: 1px solid #ffc107;">
+                                                    <div style="font-family: 'Courier New', monospace; font-size: 0.85em; line-height: 1.6; color: #333;">
+                                                        ${typeof match.matchedText === 'string' ? match.matchedText : (match.matchedText?.content || match.matchedText?.chunk_text || 'N/A')}
+                                                    </div>
+                                                </div>
+                                            </details>
+                                            
+                                            <div style="margin-top: 10px;">
+                                                <div style="font-weight: 600; color: #2c5282; margin-bottom: 5px;">
+                                                    📄 Your Document (Section ${match.yourSection}):
+                                                </div>
+                                                <div style="background: white; padding: 12px; border-radius: 5px; border: 1px solid #e2e8f0;">
+                                                    <div style="font-family: 'Courier New', monospace; font-size: 0.85em; line-height: 1.6; color: #333;">
+                                                        ${match.yourText.substring(0, 300)}${match.yourText.length > 300 ? '...' : ''}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div style="margin-top: 12px; padding: 10px; background: #e8f4fd; border-radius: 5px;">
+                                                <div style="font-size: 0.85em; color: #2c5282;">
+                                                    <strong>💡 Why it matched:</strong> ${match.explanation}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                document.getElementById('matchesContainer').innerHTML = matchesHTML;
+            } else if (xai.plagiarismCheck?.matchingParts && xai.plagiarismCheck.matchingParts.length > 0) {
+                const matchesHTML = `
+                    <div style="margin-top: 20px;">
+                        <h4>📋 Detailed Match Analysis</h4>
+                        <p style="color: #666; margin-bottom: 15px;">
+                            Found ${xai.plagiarismCheck.matchingParts.length} matching section(s) with stored documents
+                        </p>
+                        <div class="match-list">
+                            ${xai.plagiarismCheck.matchingParts.map((match, index) => `
+                                <div class="match-item" style="margin-bottom: 20px; padding: 15px; background: #fff; border-left: 4px solid #dc3545; border-radius: 8px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                        <span style="font-weight: 600; color: #333;">Match ${index + 1}</span>
+                                        <span class="match-score" style="font-weight: 700; color: #dc3545; font-size: 1.1em;">${match.similarity}</span>
+                                    </div>
+                                    <div style="margin-bottom: 10px;">
+                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">
+                                            <strong>Matched with:</strong> ${match.matchedDocument}
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; gap: 10px;">
+                                        <div style="background: #fff3cd; padding: 10px; border-radius: 5px;">
+                                            <div style="font-size: 0.85em; font-weight: 600; color: #856404; margin-bottom: 5px;">
+                                                Your Document:
+                                            </div>
+                                            <div style="font-size: 0.9em; color: #666; line-height: 1.5;">
+                                                ${match.sourceText}
+                                            </div>
+                                        </div>
+                                        <div style="background: #f8d7da; padding: 10px; border-radius: 5px;">
+                                            <div style="font-size: 0.85em; font-weight: 600; color: #721c24; margin-bottom: 5px;">
+                                                Matched Content:
+                                            </div>
+                                            <div style="font-size: 0.9em; color: #666; line-height: 1.5;">
+                                                ${match.matchedText}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                document.getElementById('matchesContainer').innerHTML = matchesHTML;
+            } else if (xai.chunkBasedMatches && xai.chunkBasedMatches.length > 0) {
+                // Show summary if no detailed matches but chunk matches exist
+                const matchesHTML = `
+                    <div style="margin-top: 20px;">
+                        <h4>⚠️ Similar Documents Found</h4>
+                        <div class="match-list">
+                            ${xai.chunkBasedMatches.map(match => `
+                                <div class="match-item">
+                                    <div class="match-score">${(match.average_similarity * 100).toFixed(1)}% Similar</div>
+                                    <div class="match-document">Document: ${match.original_name || 'Unknown'}</div>
+                                    <div style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                                        ${match.matching_chunks} matching chunk(s)
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                document.getElementById('matchesContainer').innerHTML = matchesHTML;
+            }
+
+            // Blockchain Section
+            if (blockchain) {
+                document.getElementById('blockchainSection').style.display = 'block';
+                document.getElementById('txHash').textContent = blockchain.transactionHash;
+                document.getElementById('blockNumber').textContent = blockchain.blockNumber || 'Pending';
+                document.getElementById('timestamp').textContent = new Date(blockchain.timestamp).toLocaleString();
+            }
+        }
+
+        function displayError(message) {
+            result.className = 'result error show';
+            document.getElementById('resultIcon').textContent = '❌';
+            document.getElementById('resultTitle').textContent = 'Error: ' + message;
+        }
+
+        function displayRejectionError(type, data) {
+            result.className = 'result error show';
+            document.getElementById('resultIcon').textContent = '🚫';
+            
+            // Get the main result sections
+            const xaiSection = document.querySelector('.result-section');
+            const blockchainSection = document.getElementById('blockchainSection');
+            
+            // Hide blockchain section
+            if (blockchainSection) {
+                blockchainSection.style.display = 'none';
+            }
+            
+            if (type === 'duplicate') {
+                document.getElementById('resultTitle').textContent = 'Duplicate File Rejected';
+                
+                // Show duplicate info in XAI section
+                const dupInfo = data.duplicateDocument;
+                if (xaiSection) {
+                    xaiSection.innerHTML = `
+                        <h3>⚠️ Duplicate File Detected</h3>
+                        <div style="padding: 20px; background: #fff3cd; border-radius: 8px; margin-top: 15px;">
+                            <p style="margin: 5px 0; font-size: 1.1em;"><strong>This exact file already exists in the database.</strong></p>
+                            <hr style="margin: 15px 0; border: none; border-top: 1px solid #856404;">
+                            <p style="margin: 5px 0;"><strong>Document ID:</strong> ${dupInfo.id}</p>
+                            <p style="margin: 5px 0;"><strong>Original Name:</strong> ${dupInfo.name}</p>
+                            <p style="margin: 5px 0;"><strong>Uploaded:</strong> ${new Date(dupInfo.uploadedAt).toLocaleString()}</p>
+                            <p style="margin: 15px 0 5px 0; color: #856404; font-weight: bold;">${data.message}</p>
+                        </div>
+                    `;
+                }
+                
+            } else if (type === 'similarity') {
+                document.getElementById('resultTitle').textContent = 'Upload Rejected - High Similarity';
+                
+                // Show similarity info in XAI section
+                const simInfo = data.similarity;
+                if (xaiSection) {
+                    xaiSection.innerHTML = `
+                        <h3>❌ High Similarity Detected</h3>
+                        <div style="padding: 20px; background: #f8d7da; border-radius: 8px; margin-top: 15px;">
+                            <p style="margin: 10px 0; font-size: 1.1em; font-weight: bold; color: #721c24;">
+                                ${data.message}
+                            </p>
+                            <div style="margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border-left: 4px solid #dc3545;">
+                                <div style="font-size: 1.3em; margin-bottom: 10px;">
+                                    <strong>Similarity Score:</strong> 
+                                    <span style="color: #dc3545; font-weight: bold; font-size: 1.2em;">${simInfo.percentage}%</span>
+                                </div>
+                                <div style="color: #721c24;">
+                                    <strong>Threshold:</strong> ${simInfo.threshold}%
+                                </div>
+                            </div>
+                            
+                            ${simInfo.matchedDocuments && simInfo.matchedDocuments.length > 0 ? `
+                            <div style="margin-top: 20px;">
+                                <h4 style="margin: 10px 0; color: #721c24;">📄 Similar Documents Found:</h4>
+                                ${simInfo.matchedDocuments.map(doc => `
+                                    <div style="padding: 12px; background: white; border-left: 4px solid #dc3545; margin: 10px 0; border-radius: 3px;">
+                                        <div style="font-weight: bold; margin-bottom: 5px;">${doc.name}</div>
+                                        <div>Similarity: <span style="color: #dc3545; font-weight: bold;">${doc.similarity}</span> (${doc.matchingChunks} matching chunks)</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ` : ''}
+                            
+                            ${simInfo.detailedMatches && simInfo.detailedMatches.length > 0 ? `
+                            <div style="margin-top: 25px;">
+                                <h4 style="margin: 10px 0; color: #721c24;">🔍 Matching Content Examples:</h4>
+                                <p style="font-size: 0.9em; color: #666; margin-bottom: 15px;">These sections show significant overlap with existing documents:</p>
+                                ${simInfo.detailedMatches.slice(0, 3).map((match, idx) => `
+                                    <div style="margin: 15px 0; padding: 15px; background: white; border-radius: 8px; border: 2px solid #dc3545;">
+                                        <div style="font-weight: bold; margin-bottom: 12px; color: #721c24; font-size: 1.05em;">
+                                            Match #${idx + 1} - ${match.similarity} Similarity
+                                        </div>
+                                        <div style="background: #fff3cd; padding: 12px; border-radius: 5px; margin-bottom: 10px; border: 1px solid #ffc107;">
+                                            <div style="font-weight: bold; margin-bottom: 5px; color: #856404;">📄 Your Document:</div>
+                                            <div style="font-family: monospace; font-size: 0.9em; line-height: 1.4;">${match.sourceText}</div>
+                                        </div>
+                                        <div style="background: #f8d7da; padding: 12px; border-radius: 5px; border: 1px solid #dc3545;">
+                                            <div style="font-weight: bold; margin-bottom: 5px; color: #721c24;">⚠️ Matched with: ${match.matchedDocument}</div>
+                                            <div style="font-family: monospace; font-size: 0.9em; line-height: 1.4;">${match.matchedText}</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Toggle similar sections display
+        function toggleSections(id) {
+            const element = document.getElementById(id);
+            if (element.style.display === 'none') {
+                element.style.display = 'block';
+            } else {
+                element.style.display = 'none';
+            }
+        }
+
+        // Show document list modal
+        async function showDocumentList() {
+            document.getElementById('documentModal').style.display = 'block';
+            await loadDocuments();
+        }
+
+        // Close document list modal
+        function closeDocumentList() {
+            document.getElementById('documentModal').style.display = 'none';
+        }
+
+        // Load all documents
+        async function loadDocuments() {
+            try {
+                const response = await fetch('/api/documents?limit=100');
+                const data = await response.json();
+                
+                if (data.success && data.data.documents) {
+                    const documents = data.data.documents;
+                    
+                    if (documents.length === 0) {
+                        document.getElementById('documentList').innerHTML = `
+                            <div style="text-align: center; padding: 40px; color: #666;">
+                                <div style="font-size: 3em; margin-bottom: 10px;">📭</div>
+                                <h3>No documents yet</h3>
+                                <p>Upload your first document to get started!</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    const docsHTML = `
+                        <div style="margin-bottom: 15px; padding: 15px; background: #e8f4fd; border-radius: 8px;">
+                            <strong>Total Documents:</strong> ${documents.length}
+                        </div>
+                        <div style="display: grid; gap: 15px;">
+                            ${documents.map(doc => {
+                                const metadata = doc.metadata ? (typeof doc.metadata === 'string' ? JSON.parse(doc.metadata) : doc.metadata) : {};
+                                const docName = doc.filename || metadata.original_name || 'Unknown';
+                                const status = doc.status || metadata.status || 'unknown';
+                                const uploadedAt = doc.uploaded_at || doc.createdAt;
+                                
+                                return `
+                                    <div style="padding: 20px; background: white; border: 2px solid #e2e8f0; border-radius: 10px; 
+                                                display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="flex: 1;">
+                                            <div style="font-weight: 600; font-size: 1.1em; color: #333; margin-bottom: 5px;">
+                                                📄 ${docName}
+                                            </div>
+                                            <div style="display: flex; gap: 15px; font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                                <span><strong>ID:</strong> ${doc.id}</span>
+                                                <span><strong>Status:</strong> <span style="color: ${status === 'verified' ? '#28a745' : status === 'rejected' ? '#dc3545' : '#ffc107'}; font-weight: 600;">${status.toUpperCase()}</span></span>
+                                                <span><strong>Uploaded:</strong> ${uploadedAt ? new Date(uploadedAt).toLocaleString() : 'N/A'}</span>
+                                            </div>
+                                            ${doc.doc_hash ? `<div style="font-size: 0.8em; color: #999; font-family: monospace;">Hash: ${doc.doc_hash.substring(0, 20)}...</div>` : ''}
+                                        </div>
+                                        <div>
+                                            <button onclick="deleteDocument(${doc.id}, '${docName}')" 
+                                                    style="padding: 10px 20px; background: #dc3545; color: white; border: none; 
+                                                           border-radius: 8px; cursor: pointer; font-weight: 600;">
+                                                🗑️ Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `;
+                    
+                    document.getElementById('documentList').innerHTML = docsHTML;
+                } else {
+                    throw new Error('Failed to load documents');
+                }
+            } catch (error) {
+                console.error('Load documents error:', error);
+                document.getElementById('documentList').innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: #dc3545;">
+                        <div style="font-size: 3em; margin-bottom: 10px;">❌</div>
+                        <h3>Error loading documents</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Delete document
+        async function deleteDocument(id, name) {
+            if (!confirm(`Are you sure you want to delete "${name}"?\n\nThis will remove:\n- Document from database\n- All associated chunks\n- Physical file from server\n\nThis action cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/document/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`✅ Document "${name}" deleted successfully!\n\nYou can now upload it again if needed.`);
+                    await loadDocuments(); // Reload the list
+                } else {
+                    alert(`❌ Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                alert(`❌ Failed to delete document: ${error.message}`);
+            }
+        }
+
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    document.getElementById('blockchainStatus').textContent = '✅ Connected';
+                }
+
+                // Get blockchain status
+                const blockchainResponse = await fetch('/api/blockchain/status');
+                const blockchainData = await blockchainResponse.json();
+                
+                if (blockchainData.success && blockchainData.data.connected) {
+                    document.getElementById('blockchainStatus').textContent = '✅ Connected';
+                } else {
+                    document.getElementById('blockchainStatus').textContent = '⚠️ Offline';
+                }
+
+                // Get document count
+                const docsResponse = await fetch('/api/documents?limit=1');
+                const docsData = await docsResponse.json();
+                if (docsData.success) {
+                    document.getElementById('totalDocs').textContent = docsData.data.length || 0;
+                }
+            } catch (error) {
+                console.error('Status check error:', error);
+                document.getElementById('blockchainStatus').textContent = '❌ Error';
+            }
+        }
+    </script>
+</body>
+</html>
