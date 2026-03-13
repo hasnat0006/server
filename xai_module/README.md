@@ -7,12 +7,23 @@ Set `DATABASE_URL` (e.g., `postgres://user:password@localhost:5432/docdb`) befor
 Run the SQL migrations against your target database:
 
 ```bash
-psql -d docdb -f server/migrations.sql
+psql -d docdb -f migrations/001_create_documents_chunks.sql
+psql -d docdb -f migrations/002_create_documents_chunks.sql
 ```
 
 ## Development server
-Start the API from the server folder:
+Start the API from `xai_module`:
 
 ```bash
-cd server && npm run dev
+cd xai_module && npm run dev
 ```
+
+## Tests
+
+```bash
+cd xai_module
+python simple_test.py
+python test_integration.py
+```
+
+Detailed guide: `docs/guides/XAI_IMPLEMENTATION_GUIDE.md`

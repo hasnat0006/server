@@ -124,7 +124,7 @@ server/
 │   └── deploy.js              # Deployment script 🚀
 ├── scripts/
 │   └── DocumentRegistry.test.js  # Tests ✅
-└── SETUP_GUIDE.md             # Full documentation 📚
+└── docs/guides/SETUP_GUIDE.md # Full documentation 📚
 ```
 
 ---
@@ -207,7 +207,7 @@ Your complete blockchain + XAI document verification platform is ready for demon
 
 **Start with:** Terminal 1 → Terminal 2 → Terminal 3 → Browser
 
-**Questions?** Check SETUP_GUIDE.md for detailed documentation.
+**Questions?** Check docs/guides/SETUP_GUIDE.md for detailed documentation.
 
 ---
 

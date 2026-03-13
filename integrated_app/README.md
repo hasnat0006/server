@@ -27,6 +27,8 @@ integrated_app/
 ├── server.js              # Main integrated server
 ├── public/
 │   └── index.html        # Frontend interface
+├── scripts/              # Helper startup scripts
+├── docs/                 # Guides, reports, assets
 ├── uploads/              # Document storage
 ├── package.json
 └── .env
@@ -78,6 +80,12 @@ npm start
 ```
 
 The platform will be available at `http://localhost:3000`
+
+## Additional Documentation
+
+- Quick start guide: `docs/guides/QUICK_START.md`
+- Integration report: `docs/reports/INTEGRATION_SUMMARY.md`
+- Startup helpers: `scripts/start.sh`, `scripts/setup-and-start.sh`
 
 ## API Endpoints
 

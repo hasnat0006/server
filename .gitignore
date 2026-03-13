@@ -3,3 +3,26 @@
 /node_modules
 node_modules/
 .DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.pyc
+
+# Backup/temp files
+*.backup
+*.broken
+*.tmp
+*.bak
+
+# Hardhat build outputs
+block_chain_module/artifacts/
+block_chain_module/cache/
+
+# Local uploads/runtime dirs
+**/uploads/

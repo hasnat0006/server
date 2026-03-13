@@ -1,0 +1,4 @@
+API server to connect everything
+Enhanced XAI modules with AI detection & certificate verification
+Database schema for PostgreSQL
+Integration layer between XAI and Blockchain

@@ -218,6 +218,13 @@ await contract.verifyDocument(hash, true, "verified", 95);
 - [Ethers.js Documentation](https://docs.ethers.org/)
 - [Solidity Documentation](https://docs.soliditylang.org/)
 
+## 📖 Module Documentation Map
+
+- Guides: `docs/guides/`
+- References: `docs/references/`
+- Reports: `docs/reports/`
+- Architecture notes: `docs/architecture/`
+
 ## 🤝 Contributing
 
 This is a thesis project. For questions or suggestions, please contact the project maintainer.

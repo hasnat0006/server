@@ -1,9 +1,9 @@
 {
   "_format": "hh-sol-cache-2",
   "files": {
-    "/home/engr/thesis/server/contracts/DocumentRegistry.sol": {
-      "lastModificationDate": 1766657303361,
-      "contentHash": "1c6174e90c89685d5a5ac59c8283bd2b",
+    "D:\\Academic\\Thesis\\server\\block_chain_module\\contracts\\DocumentRegistry.sol": {
+      "lastModificationDate": 1771265387170,
+      "contentHash": "94686c2aa8cb349170ea81edd6cff7a5",
       "sourceName": "contracts/DocumentRegistry.sol",
       "solcConfig": {
         "version": "0.8.24",
