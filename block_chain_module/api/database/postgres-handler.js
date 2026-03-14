@@ -42,8 +42,90 @@ class PostgreSQLHandler {
   }
 
   async createTables(client) {
-    // Tables already exist in Neon DB - skip creation
-    console.log('✅ Using existing Neon DB schema');
+    // Keep existing schema untouched, only ensure new small-document table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS small_documents (
+        id BIGSERIAL PRIMARY KEY,
+        issued_document_id VARCHAR(100) UNIQUE NOT NULL,
+        doc_type VARCHAR(50) NOT NULL,
+        issuer_name VARCHAR(255),
+        original_name VARCHAR(255),
+        file_hash VARCHAR(66) NOT NULL,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        metadata_fingerprint VARCHAR(64),
+        analysis JSONB,
+        blockchain JSONB,
+        issued_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query('CREATE INDEX IF NOT EXISTS idx_small_documents_file_hash ON small_documents(file_hash)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_small_documents_issued_id ON small_documents(issued_document_id)');
+
+    console.log('✅ Neon schema ready (including small_documents table)');
+  }
+
+  async createSmallDocument(record) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        INSERT INTO small_documents (
+          issued_document_id,
+          doc_type,
+          issuer_name,
+          original_name,
+          file_hash,
+          metadata,
+          metadata_fingerprint,
+          analysis,
+          blockchain,
+          issued_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        RETURNING *
+      `;
+
+      const values = [
+        record.issuedDocumentId,
+        record.docType,
+        record.issuerName || null,
+        record.originalName || null,
+        record.fileHash,
+        JSON.stringify(record.metadata || {}),
+        record.metadataFingerprint || null,
+        JSON.stringify(record.analysis || {}),
+        JSON.stringify(record.blockchain || {}),
+        record.issuedAt || new Date().toISOString()
+      ];
+
+      const result = await client.query(query, values);
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  async findSmallDocumentByIssuedId(issuedDocumentId) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM small_documents WHERE issued_document_id = $1 LIMIT 1';
+      const result = await client.query(query, [issuedDocumentId]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findSmallDocumentByHash(fileHash) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM small_documents WHERE file_hash = $1 ORDER BY created_at DESC LIMIT 1';
+      const result = await client.query(query, [fileHash]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
   }
 
   async createDocument(documentData) {

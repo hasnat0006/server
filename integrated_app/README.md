@@ -15,6 +15,12 @@ This is an integrated platform combining the blockchain module and XAI module fo
 - Certificate forgery detection
 - Document authenticity verification
 
+### 🆔 Small Document Verification (New)
+- Authority-side issuance for University Certificates / NID-like documents
+- SHA-256 hash anchoring on blockchain during issuance
+- QR payload generation for later verification
+- Employer-side verification with blockchain + forgery + metadata consistency checks
+
 ### 💾 Database Storage
 - PostgreSQL for structured data
 - Document chunking for similarity search
@@ -62,6 +68,13 @@ CONTRACT_ADDRESS=<your_deployed_contract_address>
 DATABASE_URL=<your_postgres_connection_string>
 ```
 
+Neon connection format example:
+```env
+DATABASE_URL=postgresql://<user>:<password>@<host>/<db>?sslmode=require
+```
+
+For this app, `DATABASE_URL` is the single required DB setting. When present, the server uses Neon/PostgreSQL as primary storage.
+
 ### 4. Start the Blockchain Node
 In a separate terminal, from block_chain_module:
 ```bash
@@ -94,6 +107,12 @@ The platform will be available at `http://localhost:3000`
 - `GET /api/document/:id` - Get document details
 - `GET /api/documents` - List all documents
 
+### Small Document Operations
+- `POST /api/small-documents/issue` - Issue and anchor a small document (certificate/NID)
+- `POST /api/small-documents/verify` - Verify uploaded small document authenticity
+
+Small-document issuance/verification records are persisted in Neon table `small_documents` (auto-created at startup if missing).
+
 ### Blockchain Operations
 - `GET /api/blockchain/status` - Check blockchain connection
 - `GET /api/blockchain/verify/:hash` - Verify document on blockchain
@@ -116,6 +135,22 @@ The platform will be available at `http://localhost:3000`
    - XAI analysis results
    - Confidence score
 6. **Results**: User receives comprehensive analysis results including blockchain transaction
+
+### Small Document Workflow
+
+1. **Issuance (Authority/University)**
+   - Upload small document (PDF/PNG/JPG/WEBP)
+   - Provide metadata JSON (holder name, document number, issue date, etc.)
+   - System performs metadata-text consistency + forgery risk checks
+   - If checks pass, document hash is anchored on blockchain
+   - System returns issued ID + QR payload + transaction hash
+
+2. **Verification (Employer/Verifier)**
+   - Upload candidate document
+   - Optionally provide issued ID from QR payload
+   - System verifies blockchain hash existence + verification status
+   - System runs forgery checks and compares metadata fingerprint
+   - Final verdict is returned as `authentic` or `suspicious`
 
 ## Technology Stack
 

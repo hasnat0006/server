@@ -5,11 +5,44 @@
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const util = require('util');
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
+
+let pdfParse = null;
+try {
+  // Optional dependency in integrated_app; used as a robust fallback on Windows.
+  pdfParse = require('pdf-parse');
+} catch (_) {
+  pdfParse = null;
+}
 
 class DocumentParser {
+  static getPythonCommand() {
+    if (process.env.PYTHON_PATH && process.env.PYTHON_PATH.trim()) {
+      return process.env.PYTHON_PATH.trim();
+    }
+
+    // Windows environments often expose Python as `python`/`py` but not `python3`.
+    return process.platform === 'win32' ? 'python' : 'python3';
+  }
+
+  static toPythonPathLiteral(filePath) {
+    return filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  }
+
+  static async runPythonInline(script) {
+    const pythonCommand = this.getPythonCommand();
+
+    // If PYTHON_PATH is set to launcher `py`, include interpreter selector.
+    const args = pythonCommand.toLowerCase() === 'py'
+      ? ['-3', '-c', script]
+      : ['-c', script];
+
+    const { stdout } = await execFilePromise(pythonCommand, args);
+    return stdout.trim();
+  }
+
   /**
    * Parse document and extract text based on file type
    * @param {string} filePath - Path to the document file
@@ -70,12 +103,29 @@ class DocumentParser {
    * Parse PDF using Python PyPDF2
    */
   static async parsePDF(filePath) {
+    // Preferred fallback: pure Node parser (avoids Python module/runtime issues).
+    if (pdfParse) {
+      try {
+        const dataBuffer = fs.readFileSync(filePath);
+        const parser = new pdfParse.PDFParse({ data: dataBuffer });
+        const parsed = await parser.getText();
+        await parser.destroy();
+
+        if (parsed?.text && parsed.text.trim().length > 0) {
+          return parsed.text.trim();
+        }
+      } catch (error) {
+        console.warn('pdf-parse fallback failed, trying Python parser:', error.message);
+      }
+    }
+
+    const pyPath = this.toPythonPathLiteral(filePath);
     const pythonScript = `
 import sys
 import PyPDF2
 
 try:
-    with open('${filePath.replace(/'/g, "\\'")}', 'rb') as file:
+    with open('${pyPath}', 'rb') as file:
         pdf_reader = PyPDF2.PdfReader(file)
         text = ''
         for page in pdf_reader.pages:
@@ -87,8 +137,7 @@ except Exception as e:
 `;
     
     try {
-      const { stdout } = await execPromise(`python3 -c "${pythonScript}"`);
-      return stdout.trim();
+      return await this.runPythonInline(pythonScript);
     } catch (error) {
       throw new Error(`PDF parsing failed: ${error.message}`);
     }
@@ -98,12 +147,13 @@ except Exception as e:
    * Parse DOCX/DOC using Python python-docx
    */
   static async parseDOCX(filePath) {
+    const pyPath = this.toPythonPathLiteral(filePath);
     const pythonScript = `
 import sys
 try:
     from docx import Document
     
-    doc = Document('${filePath.replace(/'/g, "\\'")}')
+    doc = Document('${pyPath}')
     text = '\\n'.join([paragraph.text for paragraph in doc.paragraphs])
     print(text)
 except ImportError:
@@ -115,8 +165,7 @@ except Exception as e:
 `;
     
     try {
-      const { stdout } = await execPromise(`python3 -c "${pythonScript}"`);
-      return stdout.trim();
+      return await this.runPythonInline(pythonScript);
     } catch (error) {
       throw new Error(`DOCX parsing failed: ${error.message}`);
     }
@@ -126,13 +175,14 @@ except Exception as e:
    * Parse RTF files
    */
   static async parseRTF(filePath) {
+    const pyPath = this.toPythonPathLiteral(filePath);
     // Try to use Python striprtf if available, otherwise basic extraction
     const pythonScript = `
 import sys
 import re
 
 try:
-    with open('${filePath.replace(/'/g, "\\'")}', 'r', encoding='utf-8', errors='ignore') as file:
+    with open('${pyPath}', 'r', encoding='utf-8', errors='ignore') as file:
         content = file.read()
         # Basic RTF tag removal
         text = re.sub(r'\\{[^}]*\\}', '', content)
@@ -146,8 +196,7 @@ except Exception as e:
 `;
     
     try {
-      const { stdout } = await execPromise(`python3 -c "${pythonScript}"`);
-      return stdout.trim();
+      return await this.runPythonInline(pythonScript);
     } catch (error) {
       throw new Error(`RTF parsing failed: ${error.message}`);
     }
@@ -157,13 +206,14 @@ except Exception as e:
    * Parse ODT (OpenDocument Text)
    */
   static async parseODT(filePath) {
+    const pyPath = this.toPythonPathLiteral(filePath);
     const pythonScript = `
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
 
 try:
-    with zipfile.ZipFile('${filePath.replace(/'/g, "\\'")}', 'r') as odt_file:
+    with zipfile.ZipFile('${pyPath}', 'r') as odt_file:
         content = odt_file.read('content.xml')
         root = ET.fromstring(content)
         
@@ -182,8 +232,7 @@ except Exception as e:
 `;
     
     try {
-      const { stdout } = await execPromise(`python3 -c "${pythonScript}"`);
-      return stdout.trim();
+      return await this.runPythonInline(pythonScript);
     } catch (error) {
       throw new Error(`ODT parsing failed: ${error.message}`);
     }
@@ -193,12 +242,13 @@ except Exception as e:
    * Parse PPTX/PPT using Python python-pptx
    */
   static async parsePPTX(filePath) {
+    const pyPath = this.toPythonPathLiteral(filePath);
     const pythonScript = `
 import sys
 try:
     from pptx import Presentation
     
-    prs = Presentation('${filePath.replace(/'/g, "\\'")}')
+    prs = Presentation('${pyPath}')
     text = []
     
     for slide in prs.slides:
@@ -216,8 +266,7 @@ except Exception as e:
 `;
     
     try {
-      const { stdout } = await execPromise(`python3 -c "${pythonScript}"`);
-      return stdout.trim();
+      return await this.runPythonInline(pythonScript);
     } catch (error) {
       throw new Error(`PPTX parsing failed: ${error.message}`);
     }
@@ -227,12 +276,13 @@ except Exception as e:
    * Parse XLSX/XLS using Python openpyxl
    */
   static async parseXLSX(filePath) {
+    const pyPath = this.toPythonPathLiteral(filePath);
     const pythonScript = `
 import sys
 try:
     from openpyxl import load_workbook
     
-    wb = load_workbook('${filePath.replace(/'/g, "\\'")}', data_only=True)
+    wb = load_workbook('${pyPath}', data_only=True)
     text = []
     
     for sheet in wb.worksheets:
@@ -251,8 +301,7 @@ except Exception as e:
 `;
     
     try {
-      const { stdout } = await execPromise(`python3 -c "${pythonScript}"`);
-      return stdout.trim();
+      return await this.runPythonInline(pythonScript);
     } catch (error) {
       throw new Error(`XLSX parsing failed: ${error.message}`);
     }

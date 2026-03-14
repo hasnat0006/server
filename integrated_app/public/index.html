@@ -470,6 +470,61 @@
             background: #f8d7da;
             color: #721c24;
         }
+
+        .two-column-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .compact-card {
+            background: #fafafa;
+            border: 1px solid #e6e8ef;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        textarea.meta-input {
+            width: 100%;
+            min-height: 120px;
+            resize: vertical;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: Consolas, monospace;
+            font-size: 0.9em;
+        }
+
+        .small-result {
+            margin-top: 20px;
+            padding: 18px;
+            border-radius: 10px;
+            display: none;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .small-result.show {
+            display: block;
+        }
+
+        .small-result.success {
+            background: #d4edda;
+            border: 2px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .small-result.warning {
+            background: #fff3cd;
+            border: 2px solid #ffeaa7;
+            color: #856404;
+        }
+
+        .small-result.error {
+            background: #f8d7da;
+            border: 2px solid #f5c6cb;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -635,6 +690,81 @@
                 </div>
             </div>
         </div>
+
+        <div class="main-card">
+            <h2 style="margin-bottom: 16px; color: #333;">🆔 Small Document Flow (NID / Certificate)</h2>
+            <p style="color:#666; margin-bottom: 20px;">Use this for authority issuance and employer verification in the same interface.</p>
+
+            <div class="two-column-grid">
+                <div class="compact-card">
+                    <h3 style="margin-bottom: 12px;">🏛️ Issue Small Document</h3>
+                    <div class="upload-area" id="smallIssueUploadArea" style="padding: 22px 12px;">
+                        <div class="upload-text">Select certificate/NID file</div>
+                        <div class="upload-hint">PDF, PNG, JPG, WEBP (Max 20MB)</div>
+                        <input type="file" id="smallIssueFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp">
+                    </div>
+                    <div class="file-info" id="smallIssueFileInfo">
+                        <div class="file-name" id="smallIssueFileName"></div>
+                        <div class="file-size" id="smallIssueFileSize"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="issueDocType">Document Type</label>
+                        <select id="issueDocType">
+                            <option value="certificate">University Certificate</option>
+                            <option value="nid">National ID</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="issueIssuerName">Issuer Name</label>
+                        <input type="text" id="issueIssuerName" placeholder="University / Authority name">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="issueMetadata">Metadata (Optional JSON)</label>
+                        <textarea class="meta-input" id="issueMetadata" placeholder='{"name":"John Doe","idNumber":"1234567890","issueDate":"2026-03-14"}'></textarea>
+                    </div>
+
+                    <button class="btn" id="issueSmallDocBtn" disabled>Issue + Anchor on Blockchain</button>
+                    <div class="small-result" id="issueResult"></div>
+                </div>
+
+                <div class="compact-card">
+                    <h3 style="margin-bottom: 12px;">🧾 Verify Small Document</h3>
+                    <div class="upload-area" id="smallVerifyUploadArea" style="padding: 22px 12px;">
+                        <div class="upload-text">Upload document to verify</div>
+                        <div class="upload-hint">PDF, PNG, JPG, WEBP (Max 20MB)</div>
+                        <input type="file" id="smallVerifyFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp">
+                    </div>
+                    <div class="file-info" id="smallVerifyFileInfo">
+                        <div class="file-name" id="smallVerifyFileName"></div>
+                        <div class="file-size" id="smallVerifyFileSize"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="verifyDocType">Document Type</label>
+                        <select id="verifyDocType">
+                            <option value="certificate">University Certificate</option>
+                            <option value="nid">National ID</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="verifyIssuedId">Issued Document ID (Optional)</label>
+                        <input type="text" id="verifyIssuedId" placeholder="SD-... from QR payload">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="verifyMetadata">Metadata (Optional JSON)</label>
+                        <textarea class="meta-input" id="verifyMetadata" placeholder='{"name":"John Doe","idNumber":"1234567890","issueDate":"2026-03-14"}'></textarea>
+                    </div>
+
+                    <button class="btn" id="verifySmallDocBtn" disabled>Verify Authenticity</button>
+                    <div class="small-result" id="verifyResult"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Document Management Modal -->
@@ -669,7 +799,20 @@
         const loadingText = document.getElementById('loadingText');
         const result = document.getElementById('result');
 
+        const smallIssueUploadArea = document.getElementById('smallIssueUploadArea');
+        const smallIssueFileInput = document.getElementById('smallIssueFileInput');
+        const issueSmallDocBtn = document.getElementById('issueSmallDocBtn');
+        const issueResult = document.getElementById('issueResult');
+
+        const smallVerifyUploadArea = document.getElementById('smallVerifyUploadArea');
+        const smallVerifyFileInput = document.getElementById('smallVerifyFileInput');
+        const verifySmallDocBtn = document.getElementById('verifySmallDocBtn');
+        const verifyResult = document.getElementById('verifyResult');
+
         let selectedFile = null;
+        let selectedSmallIssueFile = null;
+        let selectedSmallVerifyFile = null;
+        let activeVectorSectionScores = [];
 
         // Check server status on load
         checkServerStatus();
@@ -711,6 +854,217 @@
 
         // Upload button click
         uploadBtn.addEventListener('click', uploadDocument);
+
+        // Small-document issue flow
+        smallIssueUploadArea.addEventListener('click', () => smallIssueFileInput.click());
+        smallIssueFileInput.addEventListener('change', (e) => handleSmallFileSelection('issue', e.target.files[0]));
+        smallIssueUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            smallIssueUploadArea.classList.add('dragover');
+        });
+        smallIssueUploadArea.addEventListener('dragleave', () => smallIssueUploadArea.classList.remove('dragover'));
+        smallIssueUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            smallIssueUploadArea.classList.remove('dragover');
+            handleSmallFileSelection('issue', e.dataTransfer.files[0]);
+        });
+        issueSmallDocBtn.addEventListener('click', issueSmallDocument);
+
+        // Small-document verify flow
+        smallVerifyUploadArea.addEventListener('click', () => smallVerifyFileInput.click());
+        smallVerifyFileInput.addEventListener('change', (e) => handleSmallFileSelection('verify', e.target.files[0]));
+        smallVerifyUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            smallVerifyUploadArea.classList.add('dragover');
+        });
+        smallVerifyUploadArea.addEventListener('dragleave', () => smallVerifyUploadArea.classList.remove('dragover'));
+        smallVerifyUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            smallVerifyUploadArea.classList.remove('dragover');
+            handleSmallFileSelection('verify', e.dataTransfer.files[0]);
+        });
+        verifySmallDocBtn.addEventListener('click', verifySmallDocument);
+
+        function handleSmallFileSelection(mode, file) {
+            if (!file) return;
+
+            if (mode === 'issue') {
+                selectedSmallIssueFile = file;
+                document.getElementById('smallIssueFileName').textContent = `📄 ${file.name}`;
+                document.getElementById('smallIssueFileSize').textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
+                document.getElementById('smallIssueFileInfo').classList.add('show');
+                issueSmallDocBtn.disabled = false;
+            } else {
+                selectedSmallVerifyFile = file;
+                document.getElementById('smallVerifyFileName').textContent = `📄 ${file.name}`;
+                document.getElementById('smallVerifyFileSize').textContent = `Size: ${(file.size / 1024).toFixed(2)} KB`;
+                document.getElementById('smallVerifyFileInfo').classList.add('show');
+                verifySmallDocBtn.disabled = false;
+            }
+        }
+
+        function parseOptionalMetadata(fieldId) {
+            const raw = (document.getElementById(fieldId)?.value || '').trim();
+            if (!raw) return {};
+
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return parsed;
+                }
+
+                console.warn(`Metadata in ${fieldId} must be a JSON object. Falling back to empty metadata.`);
+                return {};
+            } catch (error) {
+                console.warn(`Invalid JSON metadata in ${fieldId}. Falling back to empty metadata.`, error.message);
+                return {};
+            }
+        }
+
+        async function issueSmallDocument() {
+            if (!selectedSmallIssueFile) return;
+
+            issueSmallDocBtn.disabled = true;
+            renderSmallResult('issue', 'warning', 'Processing issuance...');
+
+            try {
+                const metadata = parseOptionalMetadata('issueMetadata');
+                const formData = new FormData();
+                formData.append('document', selectedSmallIssueFile);
+                formData.append('docType', document.getElementById('issueDocType').value);
+                formData.append('issuerName', document.getElementById('issueIssuerName').value || 'Unknown Issuer');
+                formData.append('metadata', JSON.stringify(metadata));
+
+                const response = await fetch('/api/small-documents/issue', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.error || 'Issuance failed');
+                }
+
+                const data = payload.data;
+                const report = [
+                    '✅ Issued and Anchored',
+                    `ID: ${data.issuedDocumentId}`,
+                    `Hash: ${data.fileHash}`,
+                    `Tx: ${data.blockchain.transactionHash}`,
+                    `QR Payload: ${JSON.stringify(data.qrPayload)}`,
+                    `QR URL: ${data.qrImageUrl}`
+                ].join('\n');
+
+                renderSmallResult('issue', 'success', report);
+            } catch (error) {
+                renderSmallResult('issue', 'error', `❌ ${error.message}`);
+            } finally {
+                issueSmallDocBtn.disabled = false;
+            }
+        }
+
+        async function verifySmallDocument() {
+            if (!selectedSmallVerifyFile) return;
+
+            verifySmallDocBtn.disabled = true;
+            renderSmallResult('verify', 'warning', 'Running verification checks...');
+
+            try {
+                const metadata = parseOptionalMetadata('verifyMetadata');
+                const formData = new FormData();
+                formData.append('document', selectedSmallVerifyFile);
+                formData.append('docType', document.getElementById('verifyDocType').value);
+                formData.append('issuedDocumentId', document.getElementById('verifyIssuedId').value || '');
+                formData.append('metadata', JSON.stringify(metadata));
+
+                const response = await fetch('/api/small-documents/verify', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const payload = await response.json();
+                if (!response.ok || !payload.success) {
+                    throw new Error(payload.error || 'Verification failed');
+                }
+
+                const data = payload.data;
+                const statusIcon = data.isAuthentic ? '✅' : '⚠️';
+                const resultType = data.isAuthentic ? 'success' : 'warning';
+                const xaiRejectionExplanation = buildXaiRejectionExplanation(data);
+
+                const reportLines = [
+                    `${statusIcon} Verdict: ${data.verdict.toUpperCase()}`,
+                    `Message: ${data.message}`,
+                    `Blockchain Authentic: ${data.checks.blockchainAuthentic}`,
+                    `Hash Match (Issued Record): ${data.checks.hashMatchedIssuedRecord}`,
+                    `Metadata Match (Issued Record): ${data.checks.metadataMatchedIssuedRecord}`,
+                    `Uploaded Hash: ${data.uploaded.fileHash}`,
+                    `Issued ID: ${data.issuedRecord ? data.issuedRecord.issuedDocumentId : 'Not Found'}`
+                ];
+
+                if (!data.isAuthentic) {
+                    reportLines.push('');
+                    reportLines.push('XAI Rejection Explanation:');
+                    reportLines.push(xaiRejectionExplanation);
+                }
+
+                const report = reportLines.join('\n');
+
+                renderSmallResult('verify', resultType, report);
+            } catch (error) {
+                renderSmallResult('verify', 'error', `❌ ${error.message}`);
+            } finally {
+                verifySmallDocBtn.disabled = false;
+            }
+        }
+
+        function buildXaiRejectionExplanation(data) {
+            const analysis = data?.analysis || {};
+            const checks = data?.checks || {};
+            const reasons = [];
+
+            if (analysis.isLikelyForged) {
+                reasons.push(`XAI marked this document as likely forged (risk score ${analysis.forgeryRiskScore || 0}%, level ${analysis.forgeryRiskLevel || 'unknown'}).`);
+            }
+
+            const missingFields = analysis?.metadataConsistency?.missingFields || [];
+            if (missingFields.length > 0) {
+                reasons.push(`Metadata evidence mismatch: ${missingFields.join(', ')} not found in extracted text.`);
+            }
+
+            if (analysis?.certificateForgery?.explanation) {
+                reasons.push(`Certificate model: ${analysis.certificateForgery.explanation}`);
+            }
+
+            if (Array.isArray(analysis.signals) && analysis.signals.length > 0) {
+                const signalReasons = analysis.signals
+                    .map(signal => signal?.explanation)
+                    .filter(Boolean)
+                    .slice(0, 2);
+
+                if (signalReasons.length > 0) {
+                    reasons.push(`Signal details: ${signalReasons.join(' | ')}`);
+                }
+            }
+
+            if (reasons.length === 0) {
+                if (!checks.blockchainAuthentic) {
+                    reasons.push('XAI did not raise a direct forgery reason; rejection is mainly due to blockchain authenticity failing.');
+                } else if (!checks.hashMatchedIssuedRecord || !checks.metadataMatchedIssuedRecord) {
+                    reasons.push('XAI did not raise a direct forgery reason; rejection is mainly due to hash/metadata mismatch with the issued record.');
+                } else {
+                    reasons.push('XAI marked this document as suspicious, but no detailed explanation was returned by the analyzer.');
+                }
+            }
+
+            return reasons.join(' ');
+        }
+
+        function renderSmallResult(mode, level, message) {
+            const target = mode === 'issue' ? issueResult : verifyResult;
+            target.className = `small-result show ${level}`;
+            target.textContent = message;
+        }
 
         async function uploadDocument() {
             if (!selectedFile) return;
@@ -797,14 +1151,44 @@
             document.getElementById('forgeryScore').textContent = forgeryScore.toFixed(1) + '%';
             document.getElementById('forgeryScoreFill').style.width = forgeryScore + '%';
 
+            activeVectorSectionScores = [];
+            document.getElementById('matchesContainer').innerHTML = '';
+
             // Display fuzzy matches if any
             if (xai.fuzzyMatchResults && xai.fuzzyMatchResults.totalMatches > 0) {
                 const fuzzyResults = xai.fuzzyMatchResults;
+                const baseThreshold = Number(fuzzyResults.chunkMatchThresholdPct || 25);
+                const baseCoverage = fuzzyResults.thresholdCoverage?.[String(baseThreshold)];
+                const baseMatchedPortion = baseCoverage?.matchedPortionPercentage ?? Number(fuzzyResults.matchedPortionPercentage || 0);
+                const baseCoveredSections = baseCoverage?.coveredSections ?? Number(fuzzyResults.matchedSections || 0);
+
+                activeVectorSectionScores = Array.isArray(fuzzyResults.sectionBestSimilarities)
+                    ? fuzzyResults.sectionBestSimilarities.map(item => Number(item.bestSimilarityRaw || 0))
+                    : [];
+
                 const matchesHTML = `
                     <div style="margin-top: 25px; padding: 20px; background: #e8f4fd; border-radius: 10px; border: 2px solid #4a90e2;">
                         <h3 style="margin: 0 0 15px 0; color: #2c5282; display: flex; align-items: center; gap: 10px;">
                             <span>🔍</span> Fuzzy Matches Found
                         </h3>
+
+                        <div style="margin: 0 0 18px 0; padding: 14px; background: #ffffff; border-radius: 8px; border: 1px solid #d8e8fb;">
+                            <div style="font-weight: 700; color: #1f4f85; margin-bottom: 10px;">Interactive Vector Matching</div>
+                            <div style="font-size: 0.9em; color: #466287; margin-bottom: 10px;">
+                                Move the threshold to see how much of the uploaded document is covered by similar stored chunks.
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;">
+                                <input id="vectorThresholdSlider" type="range" min="20" max="90" step="5" value="${baseThreshold}" oninput="updateInteractiveMatchThreshold(this.value)">
+                                <div id="vectorThresholdValue" style="font-weight: 700; color: #2c5282;">${baseThreshold}%</div>
+                            </div>
+                            <div style="margin-top: 10px; font-size: 0.95em; color: #2a4468;">
+                                Matched Portion: <strong id="interactiveMatchedPercent">${Number(baseMatchedPortion).toFixed(1)}%</strong>
+                                (<span id="interactiveMatchedSections">${baseCoveredSections}</span> / ${fuzzyResults.totalSections || 0} sections)
+                            </div>
+                            <div style="margin-top: 6px; font-size: 0.85em; color: #5a6f8a;">
+                                Blockchain decision threshold remains 60% matched portion.
+                            </div>
+                        </div>
                         
                         ${fuzzyResults.documents.map((doc, docIdx) => `
                             <div style="margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
@@ -827,7 +1211,7 @@
                                 
                                 <div id="doc${docIdx}" style="display: none; margin-top: 15px;">
                                     ${doc.matches.slice(0, 5).map((match, matchIdx) => `
-                                        <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid ${match.similarity > 0.6 ? '#dc3545' : match.similarity > 0.4 ? '#ffc107' : '#28a745'};">
+                                        <div class="vector-match-item" data-similarity="${(match.similarity * 100).toFixed(2)}" style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid ${match.similarity > 0.6 ? '#dc3545' : match.similarity > 0.4 ? '#ffc107' : '#28a745'};">
                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                                                 <span style="font-weight: 600; color: #333;">Match #${matchIdx + 1}</span>
                                                 <span style="background: ${match.similarity > 0.6 ? '#dc3545' : match.similarity > 0.4 ? '#ffc107' : '#28a745'}; 
@@ -871,6 +1255,7 @@
                     </div>
                 `;
                 document.getElementById('matchesContainer').innerHTML = matchesHTML;
+                updateInteractiveMatchThreshold(baseThreshold);
             } else if (xai.plagiarismCheck?.matchingParts && xai.plagiarismCheck.matchingParts.length > 0) {
                 const matchesHTML = `
                     <div style="margin-top: 20px;">
@@ -950,6 +1335,43 @@
             document.getElementById('resultTitle').textContent = 'Error: ' + message;
         }
 
+        function updateInteractiveMatchThreshold(value) {
+            const threshold = Number(value);
+            const thresholdValueElement = document.getElementById('vectorThresholdValue');
+            const matchedPercentElement = document.getElementById('interactiveMatchedPercent');
+            const matchedSectionsElement = document.getElementById('interactiveMatchedSections');
+
+            if (thresholdValueElement) {
+                thresholdValueElement.textContent = `${threshold}%`;
+            }
+
+            if (Array.isArray(activeVectorSectionScores) && activeVectorSectionScores.length > 0) {
+                const coveredSections = activeVectorSectionScores.filter((score) => (score * 100) >= threshold).length;
+                const matchedPortion = (coveredSections / activeVectorSectionScores.length) * 100;
+
+                if (matchedPercentElement) {
+                    matchedPercentElement.textContent = `${matchedPortion.toFixed(1)}%`;
+                }
+
+                if (matchedSectionsElement) {
+                    matchedSectionsElement.textContent = coveredSections;
+                }
+
+                // Keep the top plagiarism bar in sync with the interactive threshold view.
+                const plagiarismScoreEl = document.getElementById('plagiarismScore');
+                const plagiarismScoreFillEl = document.getElementById('plagiarismScoreFill');
+                if (plagiarismScoreEl && plagiarismScoreFillEl) {
+                    plagiarismScoreEl.textContent = `${matchedPortion.toFixed(1)}%`;
+                    plagiarismScoreFillEl.style.width = `${Math.min(100, Math.max(0, matchedPortion))}%`;
+                }
+            }
+
+            document.querySelectorAll('.vector-match-item').forEach((item) => {
+                const score = Number(item.getAttribute('data-similarity') || '0');
+                item.style.display = score >= threshold ? 'block' : 'none';
+            });
+        }
+
         function displayRejectionError(type, data) {
             result.className = 'result error show';
             document.getElementById('resultIcon').textContent = '🚫';
@@ -996,9 +1418,14 @@
                             </p>
                             <div style="margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border-left: 4px solid #dc3545;">
                                 <div style="font-size: 1.3em; margin-bottom: 10px;">
-                                    <strong>Similarity Score:</strong> 
+                                    <strong>Matched Portion:</strong> 
                                     <span style="color: #dc3545; font-weight: bold; font-size: 1.2em;">${simInfo.percentage}%</span>
                                 </div>
+                                ${simInfo.averageSimilarity ? `
+                                <div style="color: #721c24; margin-bottom: 6px;">
+                                    <strong>Average Chunk Similarity:</strong> ${simInfo.averageSimilarity}%
+                                </div>
+                                ` : ''}
                                 <div style="color: #721c24;">
                                     <strong>Threshold:</strong> ${simInfo.threshold}%
                                 </div>
@@ -1169,28 +1596,40 @@
                 const data = await response.json();
                 
                 if (data.status === 'ok') {
-                    document.getElementById('blockchainStatus').textContent = '✅ Connected';
+                    const blockchainStatusNode = document.getElementById('blockchainStatus');
+                    if (blockchainStatusNode) {
+                        blockchainStatusNode.textContent = '✅ Connected';
+                    }
                 }
 
                 // Get blockchain status
                 const blockchainResponse = await fetch('/api/blockchain/status');
                 const blockchainData = await blockchainResponse.json();
                 
-                if (blockchainData.success && blockchainData.data.connected) {
-                    document.getElementById('blockchainStatus').textContent = '✅ Connected';
-                } else {
-                    document.getElementById('blockchainStatus').textContent = '⚠️ Offline';
+                const blockchainStatusNode = document.getElementById('blockchainStatus');
+                if (blockchainStatusNode) {
+                    if (blockchainData.success && blockchainData.data.connected) {
+                        blockchainStatusNode.textContent = '✅ Connected';
+                    } else {
+                        blockchainStatusNode.textContent = '⚠️ Offline';
+                    }
                 }
 
                 // Get document count
                 const docsResponse = await fetch('/api/documents?limit=1');
                 const docsData = await docsResponse.json();
                 if (docsData.success) {
-                    document.getElementById('totalDocs').textContent = docsData.data.length || 0;
+                    const totalDocsNode = document.getElementById('totalDocs');
+                    if (totalDocsNode) {
+                        totalDocsNode.textContent = docsData.data.length || 0;
+                    }
                 }
             } catch (error) {
                 console.error('Status check error:', error);
-                document.getElementById('blockchainStatus').textContent = '❌ Error';
+                const blockchainStatusNode = document.getElementById('blockchainStatus');
+                if (blockchainStatusNode) {
+                    blockchainStatusNode.textContent = '❌ Error';
+                }
             }
         }
     </script>

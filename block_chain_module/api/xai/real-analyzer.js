@@ -3,15 +3,21 @@ const util = require('util');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const DocumentParser = require('../../../integrated_app/utils/document-parser');
 
 const execPromise = util.promisify(exec);
 
 class RealXAIAnalyzer {
   constructor() {
-    this.pythonPath = process.env.PYTHON_PATH || 'python3';
+    // Windows environments usually expose Python as `python`/`py`, not `python3`.
+    this.pythonPath = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
     // Fixed path: xai_module is in server root, not in block_chain_module
     this.xaiModulePath = path.join(__dirname, '..', '..', '..', 'xai_module');
+  }
+
+  createTempFilePath(prefix) {
+    return path.join(os.tmpdir(), `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e6)}.txt`);
   }
 
   async analyzeDocument(filePath, metadata = {}) {
@@ -101,7 +107,7 @@ class RealXAIAnalyzer {
       const scriptPath = path.join(this.xaiModulePath, 'enhanced_plagiarism_check.py');
       
       // Save text to temporary file for Python script
-      const tempFile = path.join('/tmp', `temp_${Date.now()}.txt`);
+      const tempFile = this.createTempFilePath('temp_plag');
       fs.writeFileSync(tempFile, documentText);
 
       const command = `${this.pythonPath} "${scriptPath}" "${tempFile}"`;
@@ -144,7 +150,7 @@ class RealXAIAnalyzer {
       const scriptPath = path.join(this.xaiModulePath, 'ai_content_detector.py');
       
       // Save text to temporary file
-      const tempFile = path.join('/tmp', `temp_ai_${Date.now()}.txt`);
+      const tempFile = this.createTempFilePath('temp_ai');
       fs.writeFileSync(tempFile, documentText);
 
       const command = `${this.pythonPath} "${scriptPath}" "${tempFile}"`;
@@ -186,7 +192,7 @@ class RealXAIAnalyzer {
       const scriptPath = path.join(this.xaiModulePath, 'certificate_forgery_detector.py');
       
       // Save text to temporary file
-      const tempFile = path.join('/tmp', `temp_cert_${Date.now()}.txt`);
+      const tempFile = this.createTempFilePath('temp_cert');
       fs.writeFileSync(tempFile, documentText);
 
       const command = `${this.pythonPath} "${scriptPath}" "${tempFile}"`;

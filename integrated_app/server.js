@@ -4,12 +4,14 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Import blockchain module components
 const blockchainConnector = require('../block_chain_module/api/blockchain/connector');
 const xaiAnalyzer = require('../block_chain_module/api/xai/real-analyzer');
 const dbHandler = require('../block_chain_module/api/database/handler');
 const ChunkingService = require('../block_chain_module/api/services/chunking-service');
+const DocumentParser = require('./utils/document-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -74,6 +76,165 @@ const upload = multer({
   }
 });
 
+const smallDocUpload = multer({
+  storage: storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB for small docs
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /pdf|png|jpg|jpeg|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+
+    const allowedMimeTypes = [
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/webp'
+    ];
+
+    const mimetypeAllowed = allowedMimeTypes.includes(file.mimetype);
+
+    if (mimetypeAllowed || extname) {
+      return cb(null, true);
+    }
+
+    cb(new Error('Unsupported small-document format. Use PDF/PNG/JPG/WEBP files.'));
+  }
+});
+
+async function calculateFileHash(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+
+    stream.on('data', (data) => hash.update(data));
+    stream.on('end', () => resolve('0x' + hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
+function normalizeMetadata(metadata = {}) {
+  const normalized = {};
+  Object.entries(metadata).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
+    const stringValue = String(value).trim();
+    if (stringValue) {
+      normalized[key] = stringValue;
+    }
+  });
+  return normalized;
+}
+
+function buildMetadataFingerprint(metadata = {}) {
+  const normalized = normalizeMetadata(metadata);
+  const sortedKeys = Object.keys(normalized).sort();
+  const stableObject = sortedKeys.reduce((acc, key) => {
+    acc[key] = normalized[key].toLowerCase();
+    return acc;
+  }, {});
+  return crypto.createHash('sha256').update(JSON.stringify(stableObject)).digest('hex');
+}
+
+function metadataTextConsistency(text, metadata = {}) {
+  const normalizedText = (text || '').toLowerCase();
+  const normalizedMetadata = normalizeMetadata(metadata);
+  const keys = Object.keys(normalizedMetadata);
+
+  if (keys.length === 0) {
+    return { score: 100, missingFields: [], checkedFields: [] };
+  }
+
+  const checkedFields = [];
+  const missingFields = [];
+
+  keys.forEach((key) => {
+    const value = normalizedMetadata[key].toLowerCase();
+    const compactValue = value.replace(/\s+/g, ' ').trim();
+    const found = compactValue && normalizedText.includes(compactValue);
+
+    checkedFields.push({ key, value: normalizedMetadata[key], found });
+    if (!found) {
+      missingFields.push(key);
+    }
+  });
+
+  const score = Math.max(0, Math.round(((keys.length - missingFields.length) / keys.length) * 100));
+  return { score, missingFields, checkedFields };
+}
+
+function inferRiskLevel(riskScore) {
+  if (riskScore >= 70) return 'high';
+  if (riskScore >= 40) return 'medium';
+  return 'low';
+}
+
+function parseMetadataFromBody(req) {
+  const metadataRaw = req.body.metadata;
+  if (!metadataRaw) return {};
+
+  if (typeof metadataRaw === 'object') {
+    return normalizeMetadata(metadataRaw);
+  }
+
+  try {
+    return normalizeMetadata(JSON.parse(metadataRaw));
+  } catch (error) {
+    throw new Error('Invalid metadata payload. Send metadata as valid JSON.');
+  }
+}
+
+async function runSmallDocumentForgeryAnalysis({ filePath, docType, metadata }) {
+  let extractedText = '';
+  try {
+    extractedText = await DocumentParser.parseDocument(filePath);
+  } catch (error) {
+    console.warn('Small doc text extraction warning:', error.message);
+  }
+
+  const consistency = metadataTextConsistency(extractedText, metadata);
+  const metadataMismatchRisk = 100 - consistency.score;
+
+  let certificateForgery = null;
+  if (docType === 'certificate') {
+    try {
+      certificateForgery = await xaiAnalyzer.runCertificateForgeryCheck(filePath, extractedText);
+    } catch (error) {
+      console.warn('Certificate forgery checker unavailable:', error.message);
+    }
+  }
+
+  let riskScore = metadataMismatchRisk;
+  const signals = [
+    {
+      type: 'metadata_consistency',
+      score: consistency.score,
+      riskContribution: metadataMismatchRisk,
+      explanation: consistency.missingFields.length
+        ? `Fields not detected in document text: ${consistency.missingFields.join(', ')}`
+        : 'All provided metadata fields were detected in extracted text.'
+    }
+  ];
+
+  if (certificateForgery) {
+    const certRisk = certificateForgery.isForged ? 80 : 10;
+    riskScore = Math.round((riskScore * 0.55) + (certRisk * 0.45));
+    signals.push({
+      type: 'certificate_forgery_model',
+      score: certificateForgery.isForged ? 100 : 0,
+      riskContribution: certRisk,
+      explanation: certificateForgery.explanation || 'Certificate forgery model result included.'
+    });
+  }
+
+  return {
+    extractedTextLength: extractedText.length,
+    metadataConsistency: consistency,
+    certificateForgery,
+    forgeryRiskScore: riskScore,
+    forgeryRiskLevel: inferRiskLevel(riskScore),
+    isLikelyForged: riskScore >= 70,
+    signals
+  };
+}
+
 // Initialize services
 async function initializeServices() {
   try {
@@ -129,6 +290,223 @@ app.get('/api/blockchain/status', async (req, res) => {
   }
 });
 
+app.post('/api/small-documents/issue', smallDocUpload.single('document'), async (req, res) => {
+  let uploadedPath = null;
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No small document uploaded' });
+    }
+
+    uploadedPath = req.file.path;
+    const metadata = parseMetadataFromBody(req);
+    const docType = (req.body.docType || 'certificate').toLowerCase();
+    const issuerName = req.body.issuerName || 'Unknown Issuer';
+    const fileHash = await calculateFileHash(uploadedPath);
+    const metadataFingerprint = buildMetadataFingerprint(metadata);
+
+    const existingIssuedDoc = await dbHandler.findSmallDocumentByHash(fileHash);
+    if (existingIssuedDoc) {
+      const existingIssuedId = existingIssuedDoc.issued_document_id || existingIssuedDoc.issuedDocumentId;
+      const existingIssuer = existingIssuedDoc.issuer_name || existingIssuedDoc.issuerName || 'Unknown Issuer';
+      const existingIssuedAt = existingIssuedDoc.issued_at || existingIssuedDoc.issuedAt;
+
+      return res.status(409).json({
+        success: false,
+        error: 'Duplicate small document detected',
+        message: 'This document hash already exists in the persistent database.',
+        existingRecord: {
+          issuedDocumentId: existingIssuedId,
+          issuerName: existingIssuer,
+          issuedAt: existingIssuedAt,
+          fileHash
+        }
+      });
+    }
+
+    const analysis = await runSmallDocumentForgeryAnalysis({
+      filePath: uploadedPath,
+      docType,
+      metadata
+    });
+
+    if (analysis.isLikelyForged) {
+      return res.status(400).json({
+        success: false,
+        error: 'Issuance blocked: possible forgery detected before blockchain anchoring',
+        data: {
+          docType,
+          metadata,
+          analysis
+        }
+      });
+    }
+
+    const issuedDocumentId = `SD-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
+
+    const blockchainData = await blockchainConnector.registerDocument({
+      documentName: `${docType.toUpperCase()}-${issuedDocumentId}`,
+      documentHash: fileHash,
+      xaiAnalysis: JSON.stringify({
+        flow: 'small_document_issuance',
+        docType,
+        issuerName,
+        metadataFingerprint,
+        forgeryRiskScore: analysis.forgeryRiskScore,
+        metadataConsistency: analysis.metadataConsistency.score
+      }),
+      confidenceScore: Math.max(0, 100 - analysis.forgeryRiskScore)
+    });
+
+    const issuedAt = new Date().toISOString();
+    const qrPayload = {
+      issuedDocumentId,
+      docType,
+      fileHash,
+      metadataFingerprint,
+      contractAddress: blockchainData.contractAddress,
+      txHash: blockchainData.transactionHash,
+      issuedAt
+    };
+
+    const newRecord = {
+      issuedDocumentId,
+      docType,
+      issuerName,
+      originalName: req.file.originalname,
+      fileHash,
+      metadata,
+      metadataFingerprint,
+      blockchain: blockchainData,
+      analysis,
+      issuedAt
+    };
+
+    await dbHandler.createSmallDocument(newRecord);
+
+    res.json({
+      success: true,
+      data: {
+        issuedDocumentId,
+        issuerName,
+        docType,
+        fileHash,
+        metadata,
+        metadataFingerprint,
+        analysis,
+        blockchain: blockchainData,
+        qrPayload,
+        qrImageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(JSON.stringify(qrPayload))}`,
+        message: 'Small document issued and anchored on blockchain successfully.'
+      }
+    });
+  } catch (error) {
+    console.error('Small document issuance error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (uploadedPath && fs.existsSync(uploadedPath)) {
+      fs.unlinkSync(uploadedPath);
+    }
+  }
+});
+
+app.post('/api/small-documents/verify', smallDocUpload.single('document'), async (req, res) => {
+  let uploadedPath = null;
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No small document uploaded' });
+    }
+
+    uploadedPath = req.file.path;
+    const metadata = parseMetadataFromBody(req);
+    const docType = (req.body.docType || 'certificate').toLowerCase();
+    const expectedDocumentId = req.body.issuedDocumentId || null;
+    const fileHash = await calculateFileHash(uploadedPath);
+    const metadataFingerprint = buildMetadataFingerprint(metadata);
+
+    let matchedRecord = null;
+
+    if (expectedDocumentId) {
+      matchedRecord = await dbHandler.findSmallDocumentByIssuedId(expectedDocumentId);
+    }
+
+    if (!matchedRecord) {
+      matchedRecord = await dbHandler.findSmallDocumentByHash(fileHash);
+    }
+
+    const matchedRecordMetadata = matchedRecord?.metadata
+      ? (typeof matchedRecord.metadata === 'string' ? JSON.parse(matchedRecord.metadata) : matchedRecord.metadata)
+      : {};
+
+    const matchedRecordIssuedId = matchedRecord?.issued_document_id || matchedRecord?.issuedDocumentId || null;
+    const matchedRecordFileHash = matchedRecord?.file_hash || matchedRecord?.fileHash || null;
+    const matchedRecordFingerprint = matchedRecord?.metadata_fingerprint || matchedRecord?.metadataFingerprint || null;
+    const matchedRecordIssuer = matchedRecord?.issuer_name || matchedRecord?.issuerName || null;
+    const matchedRecordDocType = matchedRecord?.doc_type || matchedRecord?.docType || null;
+    const matchedRecordIssuedAt = matchedRecord?.issued_at || matchedRecord?.issuedAt || null;
+
+    const blockchainVerification = await blockchainConnector.verifyDocument(fileHash);
+
+    const analysis = await runSmallDocumentForgeryAnalysis({
+      filePath: uploadedPath,
+      docType,
+      metadata
+    });
+
+    const metadataMatchWithIssued = matchedRecord
+      ? (matchedRecordFingerprint === metadataFingerprint)
+      : false;
+
+    const blockchainAuthentic = Boolean(blockchainVerification.exists && blockchainVerification.isVerified);
+    const isAuthentic = blockchainAuthentic && !analysis.isLikelyForged && (matchedRecord ? metadataMatchWithIssued : true);
+
+    res.json({
+      success: true,
+      data: {
+        verdict: isAuthentic ? 'authentic' : 'suspicious',
+        isAuthentic,
+        checks: {
+          blockchainAuthentic,
+          hashMatchedIssuedRecord: Boolean(matchedRecord && matchedRecordFileHash === fileHash),
+          metadataMatchedIssuedRecord: metadataMatchWithIssued,
+          forgeryRiskLevel: analysis.forgeryRiskLevel,
+          forgeryRiskScore: analysis.forgeryRiskScore
+        },
+        uploaded: {
+          originalName: req.file.originalname,
+          fileHash,
+          metadata,
+          metadataFingerprint,
+          docType
+        },
+        issuedRecord: matchedRecord
+          ? {
+              issuedDocumentId: matchedRecordIssuedId,
+              issuerName: matchedRecordIssuer,
+              docType: matchedRecordDocType,
+              issuedAt: matchedRecordIssuedAt,
+              metadata: matchedRecordMetadata,
+              metadataFingerprint: matchedRecordFingerprint
+            }
+          : null,
+        blockchain: blockchainVerification,
+        analysis,
+        message: isAuthentic
+          ? 'Document is authentic: blockchain and forgery checks passed.'
+          : 'Document is suspicious: one or more authenticity checks failed.'
+      }
+    });
+  } catch (error) {
+    console.error('Small document verification error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (uploadedPath && fs.existsSync(uploadedPath)) {
+      fs.unlinkSync(uploadedPath);
+    }
+  }
+});
+
 // Upload and analyze document (Main endpoint combining blockchain + XAI)
 app.post('/api/document/upload', upload.single('document'), async (req, res) => {
   try {
@@ -167,11 +545,37 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       });
     }
 
+    // Step 1.6: Check exact duplicate on blockchain as an additional guard
+    try {
+      const chainVerification = await blockchainConnector.verifyDocument(xaiResults.documentHash);
+      if (chainVerification?.exists) {
+        fs.unlinkSync(filePath);
+        return res.status(400).json({
+          success: false,
+          error: 'Duplicate file detected',
+          message: 'This exact document hash is already anchored on blockchain. Upload rejected.',
+          duplicateDocument: {
+            id: 'on-chain',
+            name: chainVerification.documentName || originalname,
+            uploadedAt: chainVerification.timestamp
+              ? new Date(chainVerification.timestamp * 1000).toISOString()
+              : new Date().toISOString()
+          }
+        });
+      }
+    } catch (chainCheckError) {
+      console.warn('⚠️  Blockchain duplicate pre-check unavailable:', chainCheckError.message);
+    }
+
     // Step 2: DATABASE-BASED PLAGIARISM DETECTION WITH FUZZY MATCHING
     console.log('✂️  Starting database-based fuzzy plagiarism detection...');
     let maxSimilarity = 0;
     let fuzzyMatches = [];
     let similarDocuments = [];
+    let totalSections = 0;
+    let matchedSectionCount = 0;
+    const CHUNK_MATCH_THRESHOLD = 0.25;
+    let sectionBestSimilarities = [];
     
     try {
       const documentText = xaiResults.documentText || '';
@@ -180,17 +584,30 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       if (documentText && documentText.length > 50 && chunkingService) {
         // Split current document into chunks for comparison
         const currentChunks = chunkingService.splitIntoChunks(documentText);
+        totalSections = currentChunks.length;
         console.log(`✂️  Split document into ${currentChunks.length} sections`);
         
         // Compare each chunk against database
         console.log('🔍 Performing fuzzy matching against stored documents...');
         const allMatches = [];
+        const matchedSections = new Set();
         
         for (const chunk of currentChunks) {
-          const matches = await chunkingService.findSimilarChunks(chunk.content, null, 0.25);
+          const matches = await chunkingService.findSimilarChunks(chunk.content, null, CHUNK_MATCH_THRESHOLD);
+          const bestSimilarity = matches.reduce((max, match) => Math.max(max, match.similarity || 0), 0);
+
+          sectionBestSimilarities.push({
+            section: chunk.index + 1,
+            bestSimilarityRaw: bestSimilarity,
+            bestSimilarityPct: Number((bestSimilarity * 100).toFixed(2))
+          });
+
+          if (bestSimilarity > CHUNK_MATCH_THRESHOLD) {
+            matchedSections.add(chunk.index);
+          }
           
           matches.forEach(match => {
-            if (match.similarity > 0.25) {
+            if (match.similarity > CHUNK_MATCH_THRESHOLD) {
               allMatches.push({
                 yourSection: chunk.index + 1,
                 yourText: chunk.content,
@@ -208,6 +625,8 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
             }
           });
         }
+
+        matchedSectionCount = matchedSections.size;
         
         console.log(`📊 Found ${allMatches.length} section matches`);
         
@@ -253,23 +672,48 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       console.error('Error:', chunkError.message);
     }
 
-    // Step 2.5: CHECK SIMILARITY THRESHOLD - REJECT if > 75%
-    const SIMILARITY_THRESHOLD = 75; // 75% threshold
+    // Step 2.5: CHECK MATCH THRESHOLD - REJECT if matched portion > 60%
+    const SIMILARITY_THRESHOLD = 60; // 60% threshold
     const similarityPercentage = maxSimilarity * 100;
+    const matchedPortionPercentage = totalSections > 0
+      ? (matchedSectionCount / totalSections) * 100
+      : 0;
+
+    // Precompute coverage profile so frontend can provide interactive threshold controls.
+    const coverageThresholds = [20, 25, 30, 40, 50, 60, 70, 80, 90];
+    const thresholdCoverage = {};
+    coverageThresholds.forEach((thresholdPct) => {
+      const thresholdRaw = thresholdPct / 100;
+      const coveredSections = sectionBestSimilarities.filter(
+        (sectionScore) => sectionScore.bestSimilarityRaw >= thresholdRaw
+      ).length;
+      thresholdCoverage[String(thresholdPct)] = {
+        coveredSections,
+        matchedPortionPercentage: totalSections > 0
+          ? Number(((coveredSections / totalSections) * 100).toFixed(2))
+          : 0
+      };
+    });
     
-    if (similarityPercentage > SIMILARITY_THRESHOLD) {
+    if (matchedPortionPercentage > SIMILARITY_THRESHOLD) {
       // Delete uploaded file
       fs.unlinkSync(filePath);
       
-      console.log(`❌ UPLOAD REJECTED: ${similarityPercentage.toFixed(1)}% similarity exceeds ${SIMILARITY_THRESHOLD}% threshold`);
+      console.log(`❌ UPLOAD REJECTED: ${matchedPortionPercentage.toFixed(1)}% matched portion exceeds ${SIMILARITY_THRESHOLD}% threshold`);
       
       return res.status(400).json({
         success: false,
         error: 'Upload rejected - High similarity detected',
-        message: `Upload failed: Document has ${similarityPercentage.toFixed(1)}% similarity with existing documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
+        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% of document sections matched existing stored chunks. Threshold is ${SIMILARITY_THRESHOLD}%.`,
         similarity: {
-          percentage: similarityPercentage.toFixed(1),
+          percentage: matchedPortionPercentage.toFixed(1),
+          averageSimilarity: similarityPercentage.toFixed(1),
           threshold: SIMILARITY_THRESHOLD,
+          totalSections,
+          matchedSections: matchedSectionCount,
+          chunkMatchThresholdPct: CHUNK_MATCH_THRESHOLD * 100,
+          sectionBestSimilarities,
+          thresholdCoverage,
           matchedDocuments: similarDocuments.map(doc => ({
             name: doc.document_name || doc.original_name || 'Unknown',
             documentId: doc.document_id,
@@ -284,16 +728,18 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
 
     // Update XAI results with fuzzy match comparison
     xaiResults.plagiarismCheck = {
-      isPlagiarized: similarityPercentage > SIMILARITY_THRESHOLD,
-      similarityScore: similarityPercentage,
+      isPlagiarized: matchedPortionPercentage > SIMILARITY_THRESHOLD,
+      similarityScore: matchedPortionPercentage,
+      matchedPortionPercentage,
+      averageSimilarityPercentage: similarityPercentage,
       threshold: SIMILARITY_THRESHOLD,
       fuzzyMatches: fuzzyMatches.slice(0, 20), // Top 20 matches
       matchedDocuments: similarDocuments,
       similarSections: fuzzyMatches.length,
-      explanation: similarityPercentage > SIMILARITY_THRESHOLD
-        ? `Document rejected: ${similarityPercentage.toFixed(1)}% similarity exceeds ${SIMILARITY_THRESHOLD}% threshold`
+      explanation: matchedPortionPercentage > SIMILARITY_THRESHOLD
+        ? `Document rejected: ${matchedPortionPercentage.toFixed(1)}% of sections matched existing chunks (threshold ${SIMILARITY_THRESHOLD}%)`
         : fuzzyMatches.length > 0
-        ? `Found ${fuzzyMatches.length} similar sections with average ${similarityPercentage.toFixed(1)}% similarity`
+        ? `Found ${fuzzyMatches.length} similar sections across stored chunks. Matched portion: ${matchedPortionPercentage.toFixed(1)}%, average similarity: ${similarityPercentage.toFixed(1)}%`
         : 'No similar content found - appears original',
       comparisonMethod: 'fuzzy-vector-matching'
     };
@@ -307,13 +753,19 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         similarSections: doc.section_count,
         matches: doc.matches
       })),
-      topMatches: fuzzyMatches.slice(0, 10)
+      topMatches: fuzzyMatches.slice(0, 10),
+      totalSections,
+      matchedSections: matchedSectionCount,
+      matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
+      chunkMatchThresholdPct: CHUNK_MATCH_THRESHOLD * 100,
+      sectionBestSimilarities,
+      thresholdCoverage
     };
     
-    xaiResults.status = similarityPercentage <= SIMILARITY_THRESHOLD ? 'verified' : 'rejected';
-    xaiResults.confidenceScore = Math.max(0, Math.round(100 - (similarityPercentage * 0.8)));
+    xaiResults.status = matchedPortionPercentage <= SIMILARITY_THRESHOLD ? 'verified' : 'rejected';
+    xaiResults.confidenceScore = Math.max(0, Math.round(100 - (matchedPortionPercentage * 0.8)));
 
-    console.log(`📊 XAI Analysis complete: ${xaiResults.status} (${similarityPercentage.toFixed(1)}% similarity)`);
+    console.log(`📊 XAI Analysis complete: ${xaiResults.status} (${matchedPortionPercentage.toFixed(1)}% matched portion, ${similarityPercentage.toFixed(1)}% average similarity)`);
 
     // Step 3: Save to database ONLY if passed threshold
     const documentRecord = await dbHandler.createDocument({

@@ -7,6 +7,7 @@ class DatabaseHandler {
     this.dbPath = path.join(__dirname, '..', 'data', 'documents.json');
     this.data = {
       documents: [],
+      smallDocuments: [],
       nextId: 1
     };
     this.postgresHandler = null;
@@ -27,16 +28,21 @@ class DatabaseHandler {
           const fileData = fs.readFileSync(this.dbPath, 'utf8');
           if (fileData.trim().length === 0) {
             console.warn('⚠️  JSON file is empty, initializing fresh');
-            this.data = { documents: [] };
+            this.data = { documents: [], smallDocuments: [], nextId: 1 };
             this.save();
           } else {
             this.data = JSON.parse(fileData);
+            if (!Array.isArray(this.data.documents)) this.data.documents = [];
+            if (!Array.isArray(this.data.smallDocuments)) this.data.smallDocuments = [];
+            if (typeof this.data.nextId !== 'number') {
+              this.data.nextId = this.data.documents.length + 1;
+            }
             console.log(`✅ JSON Database loaded: ${this.data.documents.length} documents`);
           }
         } catch (jsonError) {
           console.error('❌ JSON parse error:', jsonError.message);
           console.warn('⚠️  Recreating JSON database from scratch');
-          this.data = { documents: [] };
+          this.data = { documents: [], smallDocuments: [], nextId: 1 };
           this.save();
         }
       } else {
@@ -209,10 +215,6 @@ class DatabaseHandler {
     };
   }
 
-  async getDocumentByHash(documentHash) {
-    return this.data.documents.find(doc => doc.documentHash === documentHash);
-  }
-
   async deleteDocument(id) {
     let deleted = null;
     
@@ -252,6 +254,80 @@ class DatabaseHandler {
       rejected,
       analyzing
     };
+  }
+
+  async createSmallDocument(record) {
+    if (this.usePostgres && this.postgresHandler) {
+      try {
+        const pgRecord = await this.postgresHandler.createSmallDocument(record);
+
+        const existingIndex = this.data.smallDocuments.findIndex(
+          item => item.issuedDocumentId === record.issuedDocumentId
+        );
+
+        const jsonRecord = {
+          ...record,
+          id: pgRecord.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        if (existingIndex >= 0) {
+          this.data.smallDocuments[existingIndex] = jsonRecord;
+        } else {
+          this.data.smallDocuments.push(jsonRecord);
+        }
+        this.save();
+
+        return pgRecord;
+      } catch (error) {
+        console.warn('⚠️  PostgreSQL small-document insert failed, using JSON:', error.message);
+      }
+    }
+
+    const jsonRecord = {
+      ...record,
+      id: `json-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    this.data.smallDocuments.push(jsonRecord);
+    this.save();
+
+    return jsonRecord;
+  }
+
+  async findSmallDocumentByIssuedId(issuedDocumentId) {
+    if (!issuedDocumentId) return null;
+
+    if (this.usePostgres && this.postgresHandler) {
+      try {
+        const pgRecord = await this.postgresHandler.findSmallDocumentByIssuedId(issuedDocumentId);
+        if (pgRecord) return pgRecord;
+      } catch (error) {
+        console.warn('⚠️  PostgreSQL small-document query failed, using JSON:', error.message);
+      }
+    }
+
+    return this.data.smallDocuments.find(item => item.issuedDocumentId === issuedDocumentId) || null;
+  }
+
+  async findSmallDocumentByHash(fileHash) {
+    if (!fileHash) return null;
+
+    if (this.usePostgres && this.postgresHandler) {
+      try {
+        const pgRecord = await this.postgresHandler.findSmallDocumentByHash(fileHash);
+        if (pgRecord) return pgRecord;
+      } catch (error) {
+        console.warn('⚠️  PostgreSQL small-document hash query failed, using JSON:', error.message);
+      }
+    }
+
+    const matches = this.data.smallDocuments.filter(item => item.fileHash === fileHash);
+    if (matches.length === 0) return null;
+    return matches[matches.length - 1];
   }
 
   // Chunk operations - proxy to PostgreSQL
