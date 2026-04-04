@@ -1,23 +1,12 @@
-const { exec } = require('child_process');
-const util = require('util');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const DocumentParser = require('../../../integrated_app/utils/document-parser');
-
-const execPromise = util.promisify(exec);
 
 class RealXAIAnalyzer {
   constructor() {
-    // Windows environments usually expose Python as `python`/`py`, not `python3`.
-    this.pythonPath = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
-    // Fixed path: xai_module is in server root, not in block_chain_module
-    this.xaiModulePath = path.join(__dirname, '..', '..', '..', 'xai_module');
-  }
-
-  createTempFilePath(prefix) {
-    return path.join(os.tmpdir(), `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e6)}.txt`);
+    this.PlagiarismThreshold = 75;
+    this.AIThreshold = 60;
   }
 
   async analyzeDocument(filePath, metadata = {}) {
@@ -32,15 +21,15 @@ class RealXAIAnalyzer {
       const documentText = metadata.documentText || await this.extractText(filePath);
       console.log(`📄 Extracted ${documentText.length} characters`);
 
-      // Step 3: Run plagiarism check (will use chunk-based matching if available)
+      // Step 3: Run plagiarism check
       console.log('🔎 Running plagiarism detection...');
       const plagiarismResults = await this.runPlagiarismCheck(filePath, documentText, metadata.documentId);
 
-      // Step 4: Check for AI-generated content using Python
+      // Step 4: Check for AI-generated content
       console.log('🤖 Checking for AI-generated content...');
       const aiDetectionResults = await this.runAIDetection(filePath, documentText);
 
-      // Step 5: If certificate, check for forgery using Python
+      // Step 5: If certificate, check for forgery
       let forgeryResults = null;
       if (metadata.documentType === 'certificate') {
         console.log('🎓 Checking certificate authenticity...');
@@ -104,124 +93,215 @@ class RealXAIAnalyzer {
 
   async runPlagiarismCheck(filePath, documentText) {
     try {
-      const scriptPath = path.join(this.xaiModulePath, 'enhanced_plagiarism_check.py');
-      
-      // Save text to temporary file for Python script
-      const tempFile = this.createTempFilePath('temp_plag');
-      fs.writeFileSync(tempFile, documentText);
+      const text = this.normalizeText(documentText);
+      const words = text.split(' ').filter(Boolean);
 
-      const command = `${this.pythonPath} "${scriptPath}" "${tempFile}"`;
-      const { stdout, stderr } = await execPromise(command);
-
-      // Clean up temp file
-      fs.unlinkSync(tempFile);
-
-      if (stderr) {
-        console.warn('Plagiarism check stderr:', stderr);
+      if (words.length < 40) {
+        return {
+          isPlagiarized: false,
+          similarityScore: 0,
+          threshold: this.PlagiarismThreshold,
+          matchingParts: [],
+          explanation: 'Document too short for reliable plagiarism scoring'
+        };
       }
 
-      const results = JSON.parse(stdout);
-      
+      const shingles = this.buildNGrams(words, 8);
+      const counts = new Map();
+      shingles.forEach((s) => counts.set(s, (counts.get(s) || 0) + 1));
+
+      const repeatedEntries = Array.from(counts.entries()).filter(([, count]) => count > 1);
+      const duplicateShingleCount = repeatedEntries.reduce((sum, [, count]) => sum + (count - 1), 0);
+      const duplicateRatio = shingles.length > 0 ? duplicateShingleCount / shingles.length : 0;
+
+      const similarityScore = Math.min(100, Math.round(duplicateRatio * 180));
+      const matchingParts = repeatedEntries
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([segment, count]) => ({
+          text: segment,
+          similarity: Math.min(100, Math.round((count / Math.max(2, shingles.length)) * 1000)),
+          source: 'Internal duplication heuristic'
+        }));
+
+      const isPlagiarized = similarityScore >= this.PlagiarismThreshold;
+
       return {
-        isPlagiarized: results.is_plagiarized,
-        similarityScore: results.max_similarity * 100,
-        threshold: results.threshold || 75,
-        matchingParts: results.matching_parts || [],
-        explanation: results.is_plagiarized 
-          ? `Document contains plagiarized content (${(results.max_similarity * 100).toFixed(1)}% similarity)`
-          : 'No significant plagiarism detected'
+        isPlagiarized,
+        similarityScore,
+        threshold: this.PlagiarismThreshold,
+        matchingParts,
+        explanation: isPlagiarized
+          ? `High internal repetition detected (${similarityScore.toFixed(1)}% similarity score)`
+          : 'No significant repetitive plagiarism signals detected'
       };
 
     } catch (error) {
       console.error('Plagiarism check error:', error);
-      // Fallback to basic check if Python fails
       return {
         isPlagiarized: false,
-        similarityScore: Math.random() * 30,
-        threshold: 75,
+        similarityScore: 0,
+        threshold: this.PlagiarismThreshold,
         matchingParts: [],
-        explanation: 'Basic plagiarism check performed (Python module unavailable)'
+        explanation: 'Plagiarism heuristic check unavailable, treated as low-risk'
       };
     }
   }
 
   async runAIDetection(filePath, documentText) {
     try {
-      const scriptPath = path.join(this.xaiModulePath, 'ai_content_detector.py');
-      
-      // Save text to temporary file
-      const tempFile = this.createTempFilePath('temp_ai');
-      fs.writeFileSync(tempFile, documentText);
+      const text = this.normalizeText(documentText);
+      const words = text.split(' ').filter(Boolean);
+      const sentences = this.splitSentences(documentText);
 
-      const command = `${this.pythonPath} "${scriptPath}" "${tempFile}"`;
-      const { stdout, stderr } = await execPromise(command);
-
-      // Clean up
-      fs.unlinkSync(tempFile);
-
-      if (stderr) {
-        console.warn('AI detection stderr:', stderr);
+      if (words.length < 50 || sentences.length < 3) {
+        return {
+          isAIGenerated: false,
+          aiProbability: 20,
+          threshold: this.AIThreshold,
+          indicators: ['insufficient-length-for-high-confidence-ai-detection'],
+          explanation: 'Document is too short for high-confidence AI detection'
+        };
       }
 
-      const results = JSON.parse(stdout);
-      
+      const uniqueWordCount = new Set(words).size;
+      const lexicalDiversity = uniqueWordCount / words.length;
+      const sentenceLengths = sentences.map((s) => s.split(/\s+/).filter(Boolean).length);
+      const avgSentenceLength = sentenceLengths.reduce((a, b) => a + b, 0) / sentenceLengths.length;
+      const lengthVariance = this.variance(sentenceLengths);
+      const repeatedSentenceRatio = this.repeatedSentenceRatio(sentences);
+
+      let aiProbability = 10;
+      const indicators = [];
+
+      if (lexicalDiversity < 0.34) {
+        aiProbability += 20;
+        indicators.push('low-lexical-diversity');
+      }
+
+      if (lengthVariance < 18) {
+        aiProbability += 20;
+        indicators.push('uniform-sentence-length');
+      }
+
+      if (repeatedSentenceRatio > 0.14) {
+        aiProbability += 25;
+        indicators.push('repetitive-sentences');
+      }
+
+      if (avgSentenceLength > 26) {
+        aiProbability += 15;
+        indicators.push('long-structured-sentences');
+      }
+
+      if (/in conclusion|moreover|furthermore|additionally|therefore/gi.test(documentText)) {
+        aiProbability += 10;
+        indicators.push('formal-transition-heavy-language');
+      }
+
+      aiProbability = Math.min(100, Math.round(aiProbability));
+      const isAIGenerated = aiProbability >= this.AIThreshold;
+
       return {
-        isAIGenerated: results.is_ai_generated,
-        aiProbability: results.ai_probability,
-        threshold: results.threshold,
-        indicators: results.indicators || [],
-        explanation: results.explanation
+        isAIGenerated,
+        aiProbability,
+        threshold: this.AIThreshold,
+        indicators,
+        explanation: isAIGenerated
+          ? 'Language pattern heuristic suggests likely AI-generated content'
+          : 'Language pattern heuristic indicates predominantly human-like variation'
       };
 
     } catch (error) {
       console.error('AI detection error:', error);
-      // Fallback
-      const aiProb = Math.random() * 40;
       return {
         isAIGenerated: false,
-        aiProbability: aiProb,
-        threshold: 60,
+        aiProbability: 20,
+        threshold: this.AIThreshold,
         indicators: [],
-        explanation: 'Basic AI detection performed (Python module unavailable)'
+        explanation: 'AI detection heuristic check unavailable, treated as low-risk'
       };
     }
   }
 
   async runCertificateForgeryCheck(filePath, documentText) {
     try {
-      const scriptPath = path.join(this.xaiModulePath, 'certificate_forgery_detector.py');
-      
-      // Save text to temporary file
-      const tempFile = this.createTempFilePath('temp_cert');
-      fs.writeFileSync(tempFile, documentText);
+      const text = documentText || '';
+      const hasDate = /\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/gi.test(text);
+      const hasCertificateId = /(certificate\s*(no|number)?|registration\s*(no|number)?|roll\s*(no|number)?|id\s*(no|number)?|serial\s*(no|number)?)[\s:#-]*[a-z0-9-]{3,}/gi.test(text);
+      const hasIssuer = /(university|institute|board|authority|department|ministry|school|college)/gi.test(text);
+      const hasSignatureSignal = /(signature|signed|registrar|controller|principal|dean)/gi.test(text);
 
-      const command = `${this.pythonPath} "${scriptPath}" "${tempFile}"`;
-      const { stdout, stderr } = await execPromise(command);
+      const missingSignals = [];
+      if (!hasDate) missingSignals.push('date');
+      if (!hasCertificateId) missingSignals.push('certificate_id');
+      if (!hasIssuer) missingSignals.push('issuer');
+      if (!hasSignatureSignal) missingSignals.push('signature_block');
 
-      // Clean up
-      fs.unlinkSync(tempFile);
+      const score = missingSignals.length * 25;
+      const isForged = score >= 50;
 
-      if (stderr) {
-        console.warn('Certificate check stderr:', stderr);
-      }
-
-      const results = JSON.parse(stdout);
-      
       return {
-        isForged: results.is_forged,
-        explanation: results.explanation,
-        extractedInfo: results.extracted_info,
-        forgeryEvidence: results.forgery_evidence
+        isForged,
+        explanation: isForged
+          ? `Certificate consistency heuristic flagged missing signal(s): ${missingSignals.join(', ')}`
+          : 'Certificate structure appears consistent with expected fields',
+        extractedInfo: {
+          hasDate,
+          hasCertificateId,
+          hasIssuer,
+          hasSignatureSignal
+        },
+        forgeryEvidence: missingSignals
       };
 
     } catch (error) {
       console.error('Certificate forgery check error:', error);
-      // Fallback
       return {
         isForged: false,
-        explanation: 'Certificate authenticity check performed (Python module unavailable)'
+        explanation: 'Certificate authenticity heuristic check unavailable'
       };
     }
+  }
+
+  normalizeText(text) {
+    return (text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  buildNGrams(words, n) {
+    if (!Array.isArray(words) || words.length < n) return [];
+    const grams = [];
+    for (let i = 0; i <= words.length - n; i += 1) {
+      grams.push(words.slice(i, i + n).join(' '));
+    }
+    return grams;
+  }
+
+  splitSentences(text) {
+    return (text || '')
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+
+  variance(values) {
+    if (!values.length) return 0;
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const squaredDiff = values.map((v) => (v - mean) ** 2);
+    return squaredDiff.reduce((a, b) => a + b, 0) / values.length;
+  }
+
+  repeatedSentenceRatio(sentences) {
+    if (!sentences.length) return 0;
+    const normalized = sentences.map((s) => this.normalizeText(s));
+    const counts = new Map();
+    normalized.forEach((s) => counts.set(s, (counts.get(s) || 0) + 1));
+    const repeatedCount = Array.from(counts.values()).filter((c) => c > 1).length;
+    return repeatedCount / counts.size;
   }
 
   combineResults({ documentHash, documentText, plagiarismResults, aiDetectionResults, forgeryResults, metadata }) {

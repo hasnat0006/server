@@ -5,44 +5,19 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const util = require('util');
-const execFilePromise = util.promisify(execFile);
+const AdmZip = require('adm-zip');
+const mammoth = require('mammoth');
+const XLSX = require('xlsx');
 
 let pdfParse = null;
 try {
-  // Optional dependency in integrated_app; used as a robust fallback on Windows.
+  // Loaded lazily-safe in case dependency installation is incomplete.
   pdfParse = require('pdf-parse');
 } catch (_) {
   pdfParse = null;
 }
 
 class DocumentParser {
-  static getPythonCommand() {
-    if (process.env.PYTHON_PATH && process.env.PYTHON_PATH.trim()) {
-      return process.env.PYTHON_PATH.trim();
-    }
-
-    // Windows environments often expose Python as `python`/`py` but not `python3`.
-    return process.platform === 'win32' ? 'python' : 'python3';
-  }
-
-  static toPythonPathLiteral(filePath) {
-    return filePath.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  }
-
-  static async runPythonInline(script) {
-    const pythonCommand = this.getPythonCommand();
-
-    // If PYTHON_PATH is set to launcher `py`, include interpreter selector.
-    const args = pythonCommand.toLowerCase() === 'py'
-      ? ['-3', '-c', script]
-      : ['-c', script];
-
-    const { stdout } = await execFilePromise(pythonCommand, args);
-    return stdout.trim();
-  }
-
   /**
    * Parse document and extract text based on file type
    * @param {string} filePath - Path to the document file
@@ -100,70 +75,35 @@ class DocumentParser {
   }
 
   /**
-   * Parse PDF using pdf-parse (Node) or fallback to Python PyPDF2
+   * Parse PDF using pdf-parse (pure Node.js)
    */
   static async parsePDF(filePath) {
-    // Preferred: pure Node parser (avoids Python module/runtime issues).
-    if (pdfParse) {
-      try {
-        const dataBuffer = fs.readFileSync(filePath);
-        const data = await pdfParse(dataBuffer);
-
-        if (data?.text && data.text.trim().length > 0) {
-          return data.text.trim();
-        }
-      } catch (error) {
-        console.warn('pdf-parse fallback failed, trying Python parser:', error.message);
-      }
+    if (!pdfParse) {
+      throw new Error('pdf-parse is not installed. Run: npm install pdf-parse');
     }
 
-    const pyPath = this.toPythonPathLiteral(filePath);
-    const pythonScript = `
-import sys
-import PyPDF2
-
-try:
-    with open('${pyPath}', 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        text = ''
-        for page in pdf_reader.pages:
-            text += page.extract_text() + '\\n'
-        print(text)
-except Exception as e:
-    print(f'Error: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-`;
-    
     try {
-      return await this.runPythonInline(pythonScript);
+      const dataBuffer = fs.readFileSync(filePath);
+      const data = await pdfParse(dataBuffer);
+      return (data?.text || '').trim();
     } catch (error) {
       throw new Error(`PDF parsing failed: ${error.message}`);
     }
   }
 
   /**
-   * Parse DOCX/DOC using Python python-docx
+   * Parse DOCX using mammoth.
+   * Legacy .doc is not supported by mammoth and should be converted to .docx.
    */
   static async parseDOCX(filePath) {
-    const pyPath = this.toPythonPathLiteral(filePath);
-    const pythonScript = `
-import sys
-try:
-    from docx import Document
-    
-    doc = Document('${pyPath}')
-    text = '\\n'.join([paragraph.text for paragraph in doc.paragraphs])
-    print(text)
-except ImportError:
-    print('Error: python-docx not installed', file=sys.stderr)
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-`;
-    
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.doc') {
+      throw new Error('Legacy .doc is not supported. Please convert to .docx and retry.');
+    }
+
     try {
-      return await this.runPythonInline(pythonScript);
+      const result = await mammoth.extractRawText({ path: filePath });
+      return (result?.value || '').trim();
     } catch (error) {
       throw new Error(`DOCX parsing failed: ${error.message}`);
     }
@@ -173,136 +113,107 @@ except Exception as e:
    * Parse RTF files
    */
   static async parseRTF(filePath) {
-    const pyPath = this.toPythonPathLiteral(filePath);
-    // Try to use Python striprtf if available, otherwise basic extraction
-    const pythonScript = `
-import sys
-import re
-
-try:
-    with open('${pyPath}', 'r', encoding='utf-8', errors='ignore') as file:
-        content = file.read()
-        # Basic RTF tag removal
-        text = re.sub(r'\\{[^}]*\\}', '', content)
-        text = re.sub(r'\\\\[a-z]+[0-9]*[ ]?', '', text)
-        text = re.sub(r'[{}]', '', text)
-        text = '\\n'.join([line.strip() for line in text.split('\\n') if line.strip()])
-        print(text)
-except Exception as e:
-    print(f'Error: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-`;
-    
     try {
-      return await this.runPythonInline(pythonScript);
+      const content = fs.readFileSync(filePath, 'utf8');
+      return this.stripRtf(content);
     } catch (error) {
       throw new Error(`RTF parsing failed: ${error.message}`);
     }
   }
 
   /**
-   * Parse ODT (OpenDocument Text)
+   * Parse ODT by reading content.xml from the zip container.
    */
   static async parseODT(filePath) {
-    const pyPath = this.toPythonPathLiteral(filePath);
-    const pythonScript = `
-import sys
-import zipfile
-import xml.etree.ElementTree as ET
-
-try:
-    with zipfile.ZipFile('${pyPath}', 'r') as odt_file:
-        content = odt_file.read('content.xml')
-        root = ET.fromstring(content)
-        
-        # Extract text from all paragraphs
-        text = []
-        for element in root.iter():
-            if element.text:
-                text.append(element.text)
-            if element.tail:
-                text.append(element.tail)
-        
-        print(' '.join(text))
-except Exception as e:
-    print(f'Error: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-`;
-    
     try {
-      return await this.runPythonInline(pythonScript);
+      const zip = new AdmZip(filePath);
+      const entry = zip.getEntry('content.xml');
+      if (!entry) {
+        throw new Error('content.xml not found inside ODT archive');
+      }
+
+      const xml = entry.getData().toString('utf8');
+      return this.stripXml(xml);
     } catch (error) {
       throw new Error(`ODT parsing failed: ${error.message}`);
     }
   }
 
   /**
-   * Parse PPTX/PPT using Python python-pptx
+   * Parse PPTX by reading slide XML files from the zip container.
+   * Legacy .ppt binary files are not supported in this Node-only parser.
    */
   static async parsePPTX(filePath) {
-    const pyPath = this.toPythonPathLiteral(filePath);
-    const pythonScript = `
-import sys
-try:
-    from pptx import Presentation
-    
-    prs = Presentation('${pyPath}')
-    text = []
-    
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text.append(shape.text)
-    
-    print('\\n'.join(text))
-except ImportError:
-    print('Error: python-pptx not installed', file=sys.stderr)
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-`;
-    
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.ppt') {
+      throw new Error('Legacy .ppt is not supported. Please convert to .pptx and retry.');
+    }
+
     try {
-      return await this.runPythonInline(pythonScript);
+      const zip = new AdmZip(filePath);
+      const entries = zip
+        .getEntries()
+        .filter((entry) => /^ppt\/slides\/slide\d+\.xml$/i.test(entry.entryName))
+        .sort((a, b) => a.entryName.localeCompare(b.entryName, undefined, { numeric: true }));
+
+      const texts = entries.map((entry) => {
+        const xml = entry.getData().toString('utf8');
+        return this.stripXml(xml);
+      });
+
+      return texts.join('\n').trim();
     } catch (error) {
       throw new Error(`PPTX parsing failed: ${error.message}`);
     }
   }
 
   /**
-   * Parse XLSX/XLS using Python openpyxl
+   * Parse XLSX/XLS using xlsx package
    */
   static async parseXLSX(filePath) {
-    const pyPath = this.toPythonPathLiteral(filePath);
-    const pythonScript = `
-import sys
-try:
-    from openpyxl import load_workbook
-    
-    wb = load_workbook('${pyPath}', data_only=True)
-    text = []
-    
-    for sheet in wb.worksheets:
-        for row in sheet.iter_rows(values_only=True):
-            row_text = ' '.join([str(cell) for cell in row if cell is not None])
-            if row_text.strip():
-                text.append(row_text)
-    
-    print('\\n'.join(text))
-except ImportError:
-    print('Error: openpyxl not installed', file=sys.stderr)
-    sys.exit(1)
-except Exception as e:
-    print(f'Error: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-`;
-    
     try {
-      return await this.runPythonInline(pythonScript);
+      const workbook = XLSX.readFile(filePath, { cellDates: true });
+      const allRows = [];
+
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+
+        for (const row of rows) {
+          const rowText = row
+            .filter((cell) => cell !== null && cell !== undefined && String(cell).trim() !== '')
+            .map((cell) => String(cell).trim())
+            .join(' ');
+
+          if (rowText) {
+            allRows.push(rowText);
+          }
+        }
+      }
+
+      return allRows.join('\n').trim();
     } catch (error) {
       throw new Error(`XLSX parsing failed: ${error.message}`);
     }
+  }
+
+  static stripXml(xmlContent) {
+    return xmlContent
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  static stripRtf(rtfContent) {
+    return rtfContent
+      .replace(/\\par[d]?/g, '\n')
+      .replace(/\\'[0-9a-fA-F]{2}/g, '')
+      .replace(/\\[a-z]+-?\d*\s?/g, '')
+      .replace(/[{}]/g, '')
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n\s+/g, '\n')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
   }
 
   /**

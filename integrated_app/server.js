@@ -45,15 +45,13 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: (req, file, cb) => {
     // Support wide range of document formats
-    const allowedTypes = /pdf|doc|docx|txt|rtf|odt|ppt|pptx|xls|xlsx|csv|html|htm|md|tex/;
+    const allowedTypes = /pdf|docx|txt|rtf|odt|pptx|xls|xlsx|csv|html|htm|md|tex/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     
     // Allow various MIME types
     const allowedMimeTypes = [
       'application/pdf',
-      'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-powerpoint',
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -71,7 +69,7 @@ const upload = multer({
     if (mimetypeAllowed || extname) {
       return cb(null, true);
     } else {
-      cb(new Error('Unsupported file format. Please upload document files (PDF, DOCX, TXT, RTF, ODT, PPT, XLS, etc.)'));
+      cb(new Error('Unsupported file format. Please upload PDF, DOCX, TXT, RTF, ODT, PPTX, XLS/XLSX, CSV, HTML, MD, or TEX files.'));
     }
   }
 });
