@@ -100,19 +100,17 @@ class DocumentParser {
   }
 
   /**
-   * Parse PDF using Python PyPDF2
+   * Parse PDF using pdf-parse (Node) or fallback to Python PyPDF2
    */
   static async parsePDF(filePath) {
-    // Preferred fallback: pure Node parser (avoids Python module/runtime issues).
+    // Preferred: pure Node parser (avoids Python module/runtime issues).
     if (pdfParse) {
       try {
         const dataBuffer = fs.readFileSync(filePath);
-        const parser = new pdfParse.PDFParse({ data: dataBuffer });
-        const parsed = await parser.getText();
-        await parser.destroy();
+        const data = await pdfParse(dataBuffer);
 
-        if (parsed?.text && parsed.text.trim().length > 0) {
-          return parsed.text.trim();
+        if (data?.text && data.text.trim().length > 0) {
+          return data.text.trim();
         }
       } catch (error) {
         console.warn('pdf-parse fallback failed, trying Python parser:', error.message);

@@ -32368,8 +32368,134 @@
         "gasUsed": "368547",
         "contractAddress": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
       }
+    },
+    {
+      "id": 106,
+      "originalName": "p1.pdf",
+      "fileName": "p1.pdf",
+      "filePath": "/home/hasnat0006/Documents/server/integrated_app/uploads/p1.pdf",
+      "fileSize": 2812125,
+      "documentType": "research_paper",
+      "uploaderName": "Hasnat",
+      "status": "verified",
+      "documentHash": "0x5f460850012f10eed922038f1b92059e711c1870c0aafcce3597e9c3453ee63c",
+      "createdAt": "2026-04-04T05:28:51.900Z",
+      "updatedAt": "2026-04-04T05:28:52.297Z",
+      "xaiResults": {
+        "documentHash": "0x5f460850012f10eed922038f1b92059e711c1870c0aafcce3597e9c3453ee63c",
+        "documentText": "Document: p1.pdf",
+        "status": "verified",
+        "confidenceScore": 100,
+        "timestamp": "2026-04-04T05:28:51.148Z",
+        "plagiarismCheck": {
+          "isPlagiarized": false,
+          "similarityScore": 0,
+          "matchedPortionPercentage": 0,
+          "averageSimilarityPercentage": 0,
+          "threshold": 60,
+          "fuzzyMatches": [],
+          "matchedDocuments": [],
+          "similarSections": 0,
+          "explanation": "No similar content found - appears original",
+          "comparisonMethod": "fuzzy-vector-matching"
+        },
+        "aiDetection": {
+          "isAIGenerated": false,
+          "aiProbability": 55,
+          "threshold": 60,
+          "indicators": [
+            {
+              "type": "uniform_structure",
+              "confidence": 0.7,
+              "explanation": "Sentences have very uniform structure (uniformity: 99.5%), typical of AI generation"
+            },
+            {
+              "type": "repetitive_patterns",
+              "confidence": 0.75,
+              "explanation": "High repetition in sentence starters (50.0%), common in AI text"
+            },
+            {
+              "type": "unnatural_vocabulary",
+              "confidence": 0.65,
+              "explanation": "Type-Token Ratio (1.0) outside natural human range (0.4-0.7)"
+            }
+          ],
+          "explanation": "Text appears to be human-written (45.0% confidence). Some AI-like patterns detected, but not enough to classify as AI-generated."
+        },
+        "certificateForgery": null,
+        "rejectionReasons": [],
+        "explanation": {
+          "summary": "Document passed all verification checks",
+          "details": [
+            "✅ Plagiarism check: 0.0% similarity (below 0.7% threshold)",
+            "✅ AI detection: 55.0% AI probability (below 60% threshold)"
+          ],
+          "recommendation": "Document is authentic and can be registered on blockchain"
+        },
+        "metadata": {
+          "documentId": null,
+          "documentType": "research_paper",
+          "originalName": "p1.pdf"
+        },
+        "fuzzyMatchResults": {
+          "totalMatches": 0,
+          "documents": [],
+          "topMatches": [],
+          "totalSections": 0,
+          "matchedSections": 0,
+          "matchedPortionPercentage": "0.0",
+          "chunkMatchThresholdPct": 25,
+          "sectionBestSimilarities": [],
+          "thresholdCoverage": {
+            "20": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "25": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "30": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "40": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "50": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "60": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "70": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "80": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            },
+            "90": {
+              "coveredSections": 0,
+              "matchedPortionPercentage": 0
+            }
+          }
+        }
+      },
+      "blockchainData": {
+        "success": true,
+        "documentHash": "0x5f460850012f10eed922038f1b92059e711c1870c0aafcce3597e9c3453ee63c",
+        "transactionHash": "0x8ad401a3ed53af2d978b879c313f21172fd50099fb7255dead8232b2433f301d",
+        "blockNumber": 2,
+        "gasUsed": "385419",
+        "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+      }
     }
   ],
   "smallDocuments": [],
-  "nextId": 105
+  "nextId": 107
 }
