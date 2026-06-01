@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const DocumentParser = require('../../../integrated_app/utils/document-parser');
+const DocumentParser = require('../../utils/document-parser');
 
 class RealXAIAnalyzer {
   constructor() {

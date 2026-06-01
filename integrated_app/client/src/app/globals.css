@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans;
+    background:
+      radial-gradient(circle at 5% 10%, #dceee9 0%, #dceee900 36%),
+      radial-gradient(circle at 95% 0%, #e7efe6 0%, #e7efe600 38%),
+      linear-gradient(180deg, #f7faf8 0%, #f3f6f5 100%);
+  }
+}

@@ -1,12 +1,13 @@
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const embeddingService = require('./embedding-service');
 
 class ChunkingService {
   constructor(dbHandler) {
     this.dbHandler = dbHandler;
-    this.chunkSize = 1000; // characters per chunk
-    this.chunkOverlap = 200; // overlap between chunks
+    this.chunkSize = 900; // max paragraph size before splitting
+    this.chunkOverlap = 120; // overlap for long paragraph splits
   }
 
   /**
@@ -14,27 +15,45 @@ class ChunkingService {
    */
   splitIntoChunks(text) {
     const chunks = [];
-    let startIndex = 0;
     let chunkIndex = 0;
 
-    while (startIndex < text.length) {
-      const endIndex = Math.min(startIndex + this.chunkSize, text.length);
-      const chunkText = text.substring(startIndex, endIndex).trim();
-      
-      if (chunkText.length > 0) {
+    const paragraphs = (text || '')
+      .split(/\n\s*\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean);
+
+    paragraphs.forEach((paragraph) => {
+      if (paragraph.length <= this.chunkSize) {
         chunks.push({
           index: chunkIndex,
-          content: chunkText,
-          start: startIndex,
-          end: endIndex,
-          length: chunkText.length
+          content: paragraph,
+          start: null,
+          end: null,
+          length: paragraph.length
         });
         chunkIndex++;
+        return;
       }
 
-      // Move to next chunk with overlap
-      startIndex += this.chunkSize - this.chunkOverlap;
-    }
+      let startIndex = 0;
+      while (startIndex < paragraph.length) {
+        const endIndex = Math.min(startIndex + this.chunkSize, paragraph.length);
+        const chunkText = paragraph.substring(startIndex, endIndex).trim();
+
+        if (chunkText.length > 0) {
+          chunks.push({
+            index: chunkIndex,
+            content: chunkText,
+            start: null,
+            end: null,
+            length: chunkText.length
+          });
+          chunkIndex++;
+        }
+
+        startIndex += this.chunkSize - this.chunkOverlap;
+      }
+    });
 
     return chunks;
   }
@@ -78,6 +97,16 @@ class ChunkingService {
     return intersection.size / union.size; // Jaccard similarity
   }
 
+  calculateCoverage(text1, text2) {
+    const words1 = new Set(text1.toLowerCase().match(/\b\w+\b/g) || []);
+    const words2 = new Set(text2.toLowerCase().match(/\b\w+\b/g) || []);
+
+    if (words1.size === 0) return 0;
+
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    return intersection.size / words1.size; // coverage of text1 by text2
+  }
+
   /**
    * Process document and store chunks
    */
@@ -92,8 +121,14 @@ class ChunkingService {
       // Store each chunk
       const storedChunks = [];
       for (const chunk of chunks) {
-        // Create embedding
+        // Create embeddings
         const embedding = this.createSimpleEmbedding(chunk.content);
+        let embeddingVector = null;
+        try {
+          embeddingVector = await embeddingService.embedText(chunk.content);
+        } catch (error) {
+          console.warn('⚠️  Embedding generation failed:', error.message);
+        }
         
         // Calculate chunk hash
         const crypto = require('crypto');
@@ -106,7 +141,8 @@ class ChunkingService {
           chunk_text: chunk.content,
           chunk_hash: chunkHash,
           token_count: chunk.content.split(' ').filter(Boolean).length,
-          embedding: embedding
+          embedding: embedding,
+          embeddingVector: Array.isArray(embeddingVector) ? embeddingVector : null
         };
 
         const storedChunk = await this.dbHandler.createChunk(chunkData);
@@ -127,12 +163,54 @@ class ChunkingService {
    */
   async findSimilarChunks(queryText, documentId = null, threshold = 0.3) {
     try {
-      // Use database similarity search if available
-      const matches = await this.dbHandler.searchSimilarChunks(queryText, documentId, 20);
+      let matches = [];
+      let usedEmbeddingSearch = false;
+
+      try {
+        const queryEmbedding = await embeddingService.embedText(queryText);
+        if (queryEmbedding && queryEmbedding.length) {
+          matches = await this.dbHandler.searchSimilarChunksByEmbedding(queryEmbedding, documentId, 20, threshold);
+          usedEmbeddingSearch = matches.length > 0;
+        }
+      } catch (error) {
+        console.warn('⚠️  Embedding search unavailable:', error.message);
+      }
+
+      if (!matches.length) {
+        // Fallback to database similarity search
+        matches = await this.dbHandler.searchSimilarChunks(queryText, documentId, 20, threshold);
+      }
       
       if (matches && matches.length > 0) {
-        console.log(`🔍 Found ${matches.length} similar chunks from database`);
-        return matches.map(match => ({
+        const normalized = matches.map(match => {
+          const baseSimilarity = Number(match.similarity_score || 0);
+          const lexicalSimilarity = this.calculateSimilarity(queryText, match.chunk_text || '');
+          const coverageSimilarity = this.calculateCoverage(queryText, match.chunk_text || '');
+          const useEmbeddingWeights = match.similarity_mode === 'embedding' || usedEmbeddingSearch;
+          const combinedSimilarity = useEmbeddingWeights
+            ? (baseSimilarity * 0.9) + (lexicalSimilarity * 0.1)
+            : (baseSimilarity * 0.7) + (lexicalSimilarity * 0.3);
+
+          return {
+            ...match,
+            trigramSimilarity: match.similarity_mode === 'trigram' ? baseSimilarity : null,
+            embeddingSimilarity: match.similarity_mode === 'embedding' ? baseSimilarity : null,
+            lexicalSimilarity,
+            coverageSimilarity,
+            combinedSimilarity,
+          };
+        });
+
+        // Stage-2 verification: keep only candidates that also share enough lexical overlap.
+        const filtered = normalized.filter((match) => {
+          const isEmbedding = match.similarity_mode === 'embedding' || usedEmbeddingSearch;
+          const lexicalFloor = isEmbedding ? 0.02 : 0.1;
+          const enforceLexical = isEmbedding && (queryText.length < 250 || (match.chunk_text || '').length < 250);
+          return match.combinedSimilarity >= threshold && (!enforceLexical || match.lexicalSimilarity >= lexicalFloor);
+        });
+
+        console.log(`🔍 Found ${filtered.length} similar chunks from database`);
+        return filtered.map(match => ({
           query_text: queryText,
           matched_text: match.chunk_text,
           matched_chunk: {
@@ -141,7 +219,12 @@ class ChunkingService {
             chunk_index: match.chunk_index || 0,
             chunk_text: match.chunk_text
           },
-          similarity: match.similarity_score || 0.5,
+          similarity: match.combinedSimilarity,
+          trigramSimilarity: match.trigramSimilarity,
+          embeddingSimilarity: match.embeddingSimilarity,
+          lexicalSimilarity: match.lexicalSimilarity,
+          coverageSimilarity: match.coverageSimilarity,
+          similarityMode: match.similarity_mode || (usedEmbeddingSearch ? 'embedding' : 'trigram'),
           source_document: match.filename,
           document_id: match.document_id,
           matched_document_id: match.document_id,

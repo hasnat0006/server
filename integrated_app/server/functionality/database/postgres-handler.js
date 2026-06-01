@@ -7,6 +7,15 @@ class PostgreSQLHandler {
     this.pool = null;
   }
 
+  formatVector(vector) {
+    if (!Array.isArray(vector) || vector.length === 0) {
+      return null;
+    }
+
+    const sanitized = vector.map((value) => (Number.isFinite(value) ? value : 0));
+    return `[${sanitized.join(',')}]`;
+  }
+
   async initialize() {
     try {
       // Use DATABASE_URL if available (Neon DB format), otherwise use individual params
@@ -295,9 +304,9 @@ class PostgreSQLHandler {
     try {
       const query = `
         INSERT INTO chunks (
-          document_id, chunk_index, chunk_text, chunk_hash, token_count, embedding
+          document_id, chunk_index, chunk_text, chunk_hash, token_count, embedding, embedding_vector
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
       `;
 
@@ -308,13 +317,16 @@ class PostgreSQLHandler {
         embeddingValue = JSON.stringify(chunkData.embedding);
       }
 
+      const embeddingVectorValue = this.formatVector(chunkData.embeddingVector);
+
       const values = [
         chunkData.document_id,
         chunkData.chunk_index,
         chunkData.chunk_text || chunkData.content,
         chunkData.chunk_hash,
         chunkData.token_count || (chunkData.chunk_text || chunkData.content).split(' ').filter(Boolean).length,
-        embeddingValue
+        embeddingValue,
+        embeddingVectorValue
       ];
 
       const result = await client.query(query, values);
@@ -339,30 +351,35 @@ class PostgreSQLHandler {
     }
   }
 
-  async searchSimilarChunks(queryText, excludeDocumentId = null, limit = 10) {
+  async searchSimilarChunks(queryText, excludeDocumentId = null, limit = 10, similarityThreshold = 0.45) {
     const client = await this.pool.connect();
     try {
+      const safeThreshold = Math.max(0.0, Math.min(1.0, Number(similarityThreshold) || 0.45));
+
       // Text similarity search using pg_trgm
       let query = `
         SELECT 
           c.*,
           d.filename,
           d.metadata as doc_metadata,
-          similarity(c.chunk_text, $1) as similarity_score
+          similarity(c.chunk_text, $1) as similarity_score,
+          'trigram' as similarity_mode
         FROM chunks c
         JOIN documents d ON c.document_id = d.id
-        WHERE similarity(c.chunk_text, $1) > 0.3
+        WHERE char_length($1) >= 80
+          AND char_length(c.chunk_text) >= 80
+          AND similarity(c.chunk_text, $1) > $2
       `;
       
-      const values = [queryText];
+      const values = [queryText, safeThreshold];
       
       if (excludeDocumentId) {
-        query += ` AND c.document_id != $2`;
+        query += ` AND c.document_id != $3`;
         values.push(excludeDocumentId);
-        query += ` ORDER BY similarity_score DESC LIMIT $3`;
+        query += ` ORDER BY similarity_score DESC LIMIT $4`;
         values.push(limit);
       } else {
-        query += ` ORDER BY similarity_score DESC LIMIT $2`;
+        query += ` ORDER BY similarity_score DESC LIMIT $3`;
         values.push(limit);
       }
       
@@ -395,6 +412,81 @@ class PostgreSQLHandler {
     }
   }
 
+  async searchSimilarChunksByEmbedding(embeddingVector, excludeDocumentId = null, limit = 10, similarityThreshold = 0.25) {
+    const client = await this.pool.connect();
+    try {
+      const vectorValue = this.formatVector(embeddingVector);
+      if (!vectorValue) {
+        return [];
+      }
+
+      const safeThreshold = Math.max(0.0, Math.min(1.0, Number(similarityThreshold) || 0.25));
+
+      let query = `
+        SELECT
+          c.*,
+          d.filename,
+          d.metadata as doc_metadata,
+          (1 - (c.embedding_vector <=> $1::vector)) as similarity_score,
+          'embedding' as similarity_mode
+        FROM chunks c
+        JOIN documents d ON c.document_id = d.id
+        WHERE c.embedding_vector IS NOT NULL
+          AND (1 - (c.embedding_vector <=> $1::vector)) >= $2
+      `;
+
+      const values = [vectorValue, safeThreshold];
+
+      if (excludeDocumentId) {
+        query += ` AND c.document_id != $3`;
+        values.push(excludeDocumentId);
+        query += ` ORDER BY c.embedding_vector <=> $1::vector LIMIT $4`;
+        values.push(limit);
+      } else {
+        query += ` ORDER BY c.embedding_vector <=> $1::vector LIMIT $3`;
+        values.push(limit);
+      }
+
+      const result = await client.query(query, values);
+      return result.rows;
+    } catch (error) {
+      console.warn('⚠️  Embedding similarity search failed:', error.message);
+      return [];
+    } finally {
+      client.release();
+    }
+  }
+
+  async findChunksByHash(chunkHash, excludeDocumentId = null, limit = 20) {
+    const client = await this.pool.connect();
+    try {
+      let query = `
+        SELECT
+          c.*,
+          d.filename,
+          d.metadata as doc_metadata
+        FROM chunks c
+        JOIN documents d ON c.document_id = d.id
+        WHERE c.chunk_hash = $1
+      `;
+
+      const values = [chunkHash];
+
+      if (excludeDocumentId) {
+        query += ` AND c.document_id != $2 ORDER BY c.document_id DESC, c.chunk_index ASC LIMIT $3`;
+        values.push(excludeDocumentId, limit);
+      } else {
+        query += ` ORDER BY c.document_id DESC, c.chunk_index ASC LIMIT $2`;
+        values.push(limit);
+      }
+
+      const result = await client.query(query, values);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
   async deleteChunks(documentId) {
     const client = await this.pool.connect();
     try {
@@ -411,7 +503,5 @@ class PostgreSQLHandler {
     }
   }
 }
-
-module.exports = PostgreSQLHandler;
 
 module.exports = PostgreSQLHandler;

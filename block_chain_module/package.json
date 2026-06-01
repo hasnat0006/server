@@ -7,11 +7,8 @@
     "test": "hardhat test",
     "compile": "hardhat compile",
     "deploy": "hardhat run ignition/deploy.js --network localhost",
-    "node": "hardhat node",
-    "clean": "hardhat clean",
-    "server": "node api/server.js",
-    "start": "node api/server.js",
-    "dev": "nodemon api/server.js"
+    "start": "hardhat node",
+    "clean": "hardhat clean"
   },
   "keywords": [
     "blockchain",
@@ -42,12 +39,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.1",
-    "multer": "^1.4.5-lts.1",
-    "pdf-parse": "^2.4.5",
-    "pdf2json": "^4.0.0",
-    "pg": "^8.16.3"
+    "dotenv": "^16.6.1"
   }
 }

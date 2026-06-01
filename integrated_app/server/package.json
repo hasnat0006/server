@@ -1,21 +1,15 @@
 {
-  "name": "integrated-document-verification",
+  "name": "integrated-app-server",
   "version": "1.0.0",
-  "description": "Integrated Document Verification Platform - Blockchain + XAI",
+  "private": true,
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon --watch server.js --watch functionality --watch utils --ext js,mjs,cjs --ignore functionality/data/*.json --ignore uploads/* server.js",
+    "backfill:embeddings": "node scripts/backfill-embeddings.js"
   },
-  "keywords": [
-    "blockchain",
-    "xai",
-    "document-verification",
-    "explainable-ai"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
+    "@xenova/transformers": "^2.17.2",
     "adm-zip": "^0.5.17",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
@@ -23,6 +17,7 @@
     "mammoth": "^1.12.0",
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
+    "pg": "^8.20.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

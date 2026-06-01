@@ -1,0 +1,19 @@
+{
+  "documents": [
+    {
+      "id": 1,
+      "originalName": "p1.pdf",
+      "fileName": "p1.pdf",
+      "filePath": "/home/hasnat0006/Documents/server/integrated_app/server/uploads/p1.pdf",
+      "fileSize": 2812125,
+      "documentType": "general",
+      "uploaderName": "Anonymous",
+      "status": "verified",
+      "documentHash": "0x5f460850012f10eed922038f1b92059e711c1870c0aafcce3597e9c3453ee63c",
+      "createdAt": "2026-04-04T06:56:31.229Z",
+      "updatedAt": "2026-04-04T06:56:31.229Z"
+    }
+  ],
+  "smallDocuments": [],
+  "nextId": 2
+}

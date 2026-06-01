@@ -7,14 +7,14 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 // Import blockchain module components
-const blockchainConnector = require('../block_chain_module/api/blockchain/connector');
-const xaiAnalyzer = require('../block_chain_module/api/xai/real-analyzer');
-const dbHandler = require('../block_chain_module/api/database/handler');
-const ChunkingService = require('../block_chain_module/api/services/chunking-service');
+const blockchainConnector = require('../../block_chain_module/api/blockchain/connector');
+const xaiAnalyzer = require('./functionality/xai/real-analyzer');
+const dbHandler = require('./functionality/database/handler');
+const ChunkingService = require('./functionality/services/chunking-service');
 const DocumentParser = require('./utils/document-parser');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const BASE_PORT = parseInt(process.env.SERVER_PORT || process.env.PORT || '5000', 10);
 
 // Initialize chunking service
 let chunkingService = null;
@@ -22,7 +22,6 @@ let chunkingService = null;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -259,9 +258,14 @@ async function initializeServices() {
 
 // Routes
 
-// Root route - serve the main page
+// Root route - API status for backend-only service
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.json({
+    service: 'integrated_app_api',
+    status: 'running',
+    message: 'UI moved to Next.js frontend app',
+    recommendedFrontend: 'http://localhost:3001'
+  });
 });
 
 // Health check
@@ -535,6 +539,19 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         success: false,
         error: 'Duplicate file detected',
         message: 'This exact document already exists in the database. Upload rejected.',
+        exactMatch: {
+          type: 'document_hash',
+          uploadedDocument: {
+            name: originalname,
+            hash: xaiResults.documentHash
+          },
+          existingDocument: {
+            id: existingDocByHash.id,
+            name: existingDocByHash.originalName || existingDocByHash.metadata?.original_name,
+            hash: existingDocByHash.documentHash,
+            uploadedAt: existingDocByHash.uploadedAt || existingDocByHash.uploaded_at
+          }
+        },
         duplicateDocument: {
           id: existingDocByHash.id,
           name: existingDocByHash.originalName || existingDocByHash.metadata?.original_name,
@@ -552,6 +569,21 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
           success: false,
           error: 'Duplicate file detected',
           message: 'This exact document hash is already anchored on blockchain. Upload rejected.',
+          exactMatch: {
+            type: 'blockchain_hash',
+            uploadedDocument: {
+              name: originalname,
+              hash: xaiResults.documentHash
+            },
+            existingDocument: {
+              id: 'on-chain',
+              name: chainVerification.documentName || originalname,
+              hash: xaiResults.documentHash,
+              uploadedAt: chainVerification.timestamp
+                ? new Date(chainVerification.timestamp * 1000).toISOString()
+                : new Date().toISOString()
+            }
+          },
           duplicateDocument: {
             id: 'on-chain',
             name: chainVerification.documentName || originalname,
@@ -572,8 +604,10 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     let similarDocuments = [];
     let totalSections = 0;
     let matchedSectionCount = 0;
-    const CHUNK_MATCH_THRESHOLD = 0.25;
+    const CHUNK_MATCH_THRESHOLD = 0.6;
     let sectionBestSimilarities = [];
+    let exactMatches = [];
+    let exactMatchSummary = [];
     
     try {
       const documentText = xaiResults.documentText || '';
@@ -581,7 +615,9 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       
       if (documentText && documentText.length > 50 && chunkingService) {
         // Split current document into chunks for comparison
-        const currentChunks = chunkingService.splitIntoChunks(documentText);
+        const currentChunks = chunkingService
+          .splitIntoChunks(documentText)
+          .filter((chunk) => chunk.content && chunk.content.length >= 120);
         totalSections = currentChunks.length;
         console.log(`✂️  Split document into ${currentChunks.length} sections`);
         
@@ -589,8 +625,39 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         console.log('🔍 Performing fuzzy matching against stored documents...');
         const allMatches = [];
         const matchedSections = new Set();
+        const exactMatchedSections = new Set();
+        const exactDocGroups = {};
         
         for (const chunk of currentChunks) {
+          const chunkHash = crypto.createHash('sha256').update(chunk.content).digest('hex');
+          const exactRows = await dbHandler.findChunksByHash(chunkHash, null, 20);
+
+          if (exactRows.length > 0) {
+            exactMatchedSections.add(chunk.index);
+            matchedSections.add(chunk.index);
+
+            exactRows.forEach((row) => {
+              const matchItem = {
+                yourSection: chunk.index + 1,
+                matchedSection: (row.chunk_index || 0) + 1,
+                matchedDocument: row.filename || row.doc_metadata?.original_name || 'Unknown',
+                matchedDocumentId: row.document_id,
+                chunkHash: chunkHash,
+              };
+
+              exactMatches.push(matchItem);
+
+              if (!exactDocGroups[row.document_id]) {
+                exactDocGroups[row.document_id] = {
+                  documentId: row.document_id,
+                  documentName: row.filename || row.doc_metadata?.original_name || 'Unknown',
+                  exactSections: 0,
+                };
+              }
+              exactDocGroups[row.document_id].exactSections += 1;
+            });
+          }
+
           const matches = await chunkingService.findSimilarChunks(chunk.content, null, CHUNK_MATCH_THRESHOLD);
           const bestSimilarity = matches.reduce((max, match) => Math.max(max, match.similarity || 0), 0);
 
@@ -623,6 +690,9 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
             }
           });
         }
+
+        exactMatchSummary = Object.values(exactDocGroups)
+          .sort((a, b) => b.exactSections - a.exactSections);
 
         matchedSectionCount = matchedSections.size;
         
@@ -671,7 +741,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     }
 
     // Step 2.5: CHECK MATCH THRESHOLD - REJECT if matched portion > 60%
-    const SIMILARITY_THRESHOLD = 60; // 60% threshold
+    const SIMILARITY_THRESHOLD = 40; // lower threshold to catch paraphrased overlap
     const similarityPercentage = maxSimilarity * 100;
     const matchedPortionPercentage = totalSections > 0
       ? (matchedSectionCount / totalSections) * 100
@@ -719,6 +789,12 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
             matchingChunks: doc.section_count,
             similarSections: doc.section_count
           })),
+            exactMatch: {
+              totalExactMatches: exactMatches.length,
+              exactMatchedSections: Array.from(new Set(exactMatches.map((m) => m.yourSection))).length,
+              documents: exactMatchSummary,
+              matches: exactMatches.slice(0, 100)
+            },
           fuzzyMatches: fuzzyMatches.slice(0, 10) // Top 10 section matches
         }
       });
@@ -757,7 +833,13 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
       chunkMatchThresholdPct: CHUNK_MATCH_THRESHOLD * 100,
       sectionBestSimilarities,
-      thresholdCoverage
+      thresholdCoverage,
+      exactMatch: {
+        totalExactMatches: exactMatches.length,
+        exactMatchedSections: Array.from(new Set(exactMatches.map((m) => m.yourSection))).length,
+        documents: exactMatchSummary,
+        matches: exactMatches.slice(0, 100)
+      }
     };
     
     xaiResults.status = matchedPortionPercentage <= SIMILARITY_THRESHOLD ? 'verified' : 'rejected';
@@ -780,7 +862,12 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     console.log(`✅ Document saved to database with ID: ${documentRecord.id}`);
 
     // Step 3.5: Now save chunks to database
-    if (xaiResults.documentText && xaiResults.documentText.length > 50 && chunkingService) {
+    if (
+      xaiResults.documentText &&
+      xaiResults.documentText.length > 50 &&
+      chunkingService &&
+      dbHandler.usePostgres
+    ) {
       try {
         console.log(`✂️  Saving chunks for document ${documentRecord.id}...`);
         const chunks = await chunkingService.processDocument(documentRecord.id, xaiResults.documentText, {
@@ -792,6 +879,8 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       } catch (err) {
         console.error('❌ Error saving chunks:', err.message);
       }
+    } else if (xaiResults.documentText && xaiResults.documentText.length > 50 && !dbHandler.usePostgres) {
+      console.log('ℹ️  Skipping chunk save: PostgreSQL not configured');
     }
 
     // Step 4: If passed, register on blockchain
@@ -932,18 +1021,34 @@ app.get('/api/blockchain/stats', async (req, res) => {
   }
 });
 
-// Start server
-initializeServices().then(() => {
-  app.listen(PORT, () => {
+function startServer(port, retriesLeft = 5) {
+  const server = app.listen(port, () => {
     console.log(`\n${'='.repeat(60)}`);
     console.log(`🚀 INTEGRATED SERVER RUNNING`);
     console.log(`${'='.repeat(60)}`);
-    console.log(`📡 Server: http://localhost:${PORT}`);
+    console.log(`📡 Server: http://localhost:${port}`);
     console.log(`⛓️  Blockchain: Connected`);
     console.log(`🤖 XAI: Enabled`);
     console.log(`💾 Database: Ready`);
     console.log(`${'='.repeat(60)}\n`);
   });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE' && retriesLeft > 0) {
+      const nextPort = port + 1;
+      console.warn(`⚠️  Port ${port} is in use, trying ${nextPort}...`);
+      startServer(nextPort, retriesLeft - 1);
+      return;
+    }
+
+    console.error('❌ Server startup error:', error.message);
+    process.exit(1);
+  });
+}
+
+// Start server
+initializeServices().then(() => {
+  startServer(BASE_PORT);
 });
 
 // Graceful shutdown
