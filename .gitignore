@@ -27,3 +27,4 @@ block_chain_module/cache/
 # Local uploads/runtime dirs
 **/uploads/
 todo.txt
+documentation.txt

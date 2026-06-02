@@ -130,6 +130,31 @@ function buildMetadataFingerprint(metadata = {}) {
   return crypto.createHash('sha256').update(JSON.stringify(stableObject)).digest('hex');
 }
 
+/**
+ * Containment of `text` inside `referenceText` (raw, with repetition).
+ * Returns the fraction of `text`'s words that appear in `referenceText`.
+ * Used to answer "how much of the uploaded text is present in the database"
+ * (as opposed to the Jaccard-style similarity the rest of the system uses).
+ */
+function calculateContainment(text, referenceText) {
+  if (!text) return 0;
+
+  const sourceWords = (text || '').toLowerCase().match(/\b\w+\b/g) || [];
+  if (sourceWords.length === 0) return 0;
+
+  const referenceWords = new Set(
+    (referenceText || '').toLowerCase().match(/\b\w+\b/g) || []
+  );
+  if (referenceWords.size === 0) return 0;
+
+  let hits = 0;
+  for (const word of sourceWords) {
+    if (referenceWords.has(word)) hits += 1;
+  }
+
+  return hits / sourceWords.length;
+}
+
 function metadataTextConsistency(text, metadata = {}) {
   const normalizedText = (text || '').toLowerCase();
   const normalizedMetadata = normalizeMetadata(metadata);
@@ -604,15 +629,17 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     let similarDocuments = [];
     let totalSections = 0;
     let matchedSectionCount = 0;
+    let containmentSum = 0;          // sum of best-containment values, one per uploaded chunk
+    let coveredSectionCount = 0;     // # of uploaded chunks whose best-containment >= threshold
     const CHUNK_MATCH_THRESHOLD = 0.6;
     let sectionBestSimilarities = [];
     let exactMatches = [];
     let exactMatchSummary = [];
-    
+
     try {
       const documentText = xaiResults.documentText || '';
       console.log(`📝 Extracted text length: ${documentText.length} characters`);
-      
+
       if (documentText && documentText.length > 50 && chunkingService) {
         // Split current document into chunks for comparison
         const currentChunks = chunkingService
@@ -620,19 +647,27 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
           .filter((chunk) => chunk.content && chunk.content.length >= 120);
         totalSections = currentChunks.length;
         console.log(`✂️  Split document into ${currentChunks.length} sections`);
-        
+
         // Compare each chunk against database
         console.log('🔍 Performing fuzzy matching against stored documents...');
         const allMatches = [];
         const matchedSections = new Set();
         const exactMatchedSections = new Set();
         const exactDocGroups = {};
-        
+
         for (const chunk of currentChunks) {
           const chunkHash = crypto.createHash('sha256').update(chunk.content).digest('hex');
           const exactRows = await dbHandler.findChunksByHash(chunkHash, null, 20);
 
+          // Track best-match info for this chunk (used for the per-section report
+          // and the headline "how much of the upload is in the DB" metric).
+          let bestMatch = null;            // strongest fuzzy match (by similarity)
+          let bestMatchText = null;        // matched DB chunk text
+          let bestContainment = 0;         // 0..1, fraction of THIS chunk in the DB match
+          let hasExactMatch = false;
+
           if (exactRows.length > 0) {
+            hasExactMatch = true;
             exactMatchedSections.add(chunk.index);
             matchedSections.add(chunk.index);
 
@@ -661,16 +696,41 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
           const matches = await chunkingService.findSimilarChunks(chunk.content, null, CHUNK_MATCH_THRESHOLD);
           const bestSimilarity = matches.reduce((max, match) => Math.max(max, match.similarity || 0), 0);
 
+          // Pick the strongest match (and its DB text) so we can measure
+          // how much of THIS uploaded chunk is contained in the DB.
+          if (matches.length > 0) {
+            bestMatch = matches.reduce((a, b) => ((b.similarity || 0) > (a.similarity || 0) ? b : a));
+            bestMatchText = bestMatch.matched_chunk?.content
+              || (typeof bestMatch.matched_chunk === 'string' ? bestMatch.matched_chunk : null)
+              || bestMatch.matched_text
+              || null;
+            if (bestMatchText) {
+              bestContainment = calculateContainment(chunk.content, bestMatchText);
+            }
+          }
+
+          // Exact-hash hits: the chunk is fully present in the DB by definition.
+          if (hasExactMatch) {
+            bestContainment = 1;
+          }
+
+          // Accumulate the per-chunk best containment; this is what feeds the
+          // "how much of the uploaded text is present in the database" metric.
+          containmentSum += bestContainment;
+          if (bestContainment >= CHUNK_MATCH_THRESHOLD) {
+            matchedSections.add(chunk.index);
+            coveredSectionCount += 1;
+          }
+
           sectionBestSimilarities.push({
             section: chunk.index + 1,
             bestSimilarityRaw: bestSimilarity,
-            bestSimilarityPct: Number((bestSimilarity * 100).toFixed(2))
+            bestSimilarityPct: Number((bestSimilarity * 100).toFixed(2)),
+            bestContainmentRaw: Number(bestContainment.toFixed(4)),
+            bestContainmentPct: Number((bestContainment * 100).toFixed(2)),
+            exactMatch: hasExactMatch
           });
 
-          if (bestSimilarity > CHUNK_MATCH_THRESHOLD) {
-            matchedSections.add(chunk.index);
-          }
-          
           matches.forEach(match => {
             if (match.similarity > CHUNK_MATCH_THRESHOLD) {
               allMatches.push({
@@ -681,7 +741,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
                 matchedDocument: match.source_document,
                 matchedDocumentId: match.document_id,
                 similarity: match.similarity,
-                explanation: match.similarity > 0.6 
+                explanation: match.similarity > 0.6
                   ? 'These sections have high similarity, indicating significant overlap in content.'
                   : match.similarity > 0.4
                   ? 'These sections have moderate similarity, sharing some common phrases or concepts.'
@@ -695,9 +755,9 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
           .sort((a, b) => b.exactSections - a.exactSections);
 
         matchedSectionCount = matchedSections.size;
-        
+
         console.log(`📊 Found ${allMatches.length} section matches`);
-        
+
         if (allMatches.length > 0) {
           // Group by document
           const docGroups = {};
@@ -716,17 +776,17 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
             docGroups[docId].total_similarity += match.similarity;
             docGroups[docId].section_count++;
           });
-          
+
           // Calculate average similarity per document
           similarDocuments = Object.values(docGroups).map(doc => ({
             ...doc,
             average_similarity: doc.total_similarity / doc.section_count,
             original_name: doc.document_name
           })).sort((a, b) => b.average_similarity - a.average_similarity);
-          
+
           maxSimilarity = similarDocuments[0]?.average_similarity || 0;
           fuzzyMatches = allMatches.sort((a, b) => b.similarity - a.similarity);
-          
+
           console.log(`✅ Fuzzy matching complete: ${(maxSimilarity * 100).toFixed(1)}% max similarity`);
           console.log(`📄 Found ${fuzzyMatches.length} similar sections across ${similarDocuments.length} documents`);
         } else {
@@ -740,46 +800,58 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       console.error('Error:', chunkError.message);
     }
 
-    // Step 2.5: CHECK MATCH THRESHOLD - REJECT if matched portion > 60%
-    const SIMILARITY_THRESHOLD = 40; // lower threshold to catch paraphrased overlap
+    // Step 2.5: CHECK MATCH THRESHOLD
+    // The headline metric is now "how much of the uploaded text is present in
+    // the database" (containment of every uploaded chunk in its best DB match,
+    // averaged across all chunks). This is the user's intended direction:
+    // we measure the upload's presence in the corpus, not the corpus's
+    // presence in the upload.
+    const SIMILARITY_THRESHOLD = 40; // reject if >40% of the upload is in the DB
     const similarityPercentage = maxSimilarity * 100;
     const matchedPortionPercentage = totalSections > 0
-      ? (matchedSectionCount / totalSections) * 100
+      ? Number(((containmentSum / totalSections) * 100).toFixed(2))
       : 0;
 
-    // Precompute coverage profile so frontend can provide interactive threshold controls.
+    // Per-threshold coverage profile, also based on containment so the UI's
+    // interactive slider reflects the new metric consistently.
     const coverageThresholds = [20, 25, 30, 40, 50, 60, 70, 80, 90];
     const thresholdCoverage = {};
     coverageThresholds.forEach((thresholdPct) => {
       const thresholdRaw = thresholdPct / 100;
       const coveredSections = sectionBestSimilarities.filter(
-        (sectionScore) => sectionScore.bestSimilarityRaw >= thresholdRaw
+        (sectionScore) => (sectionScore.bestContainmentRaw || 0) >= thresholdRaw
       ).length;
+      const coveredContainment = sectionBestSimilarities.reduce(
+        (sum, sectionScore) => sum + Math.max(sectionScore.bestContainmentRaw || 0, thresholdRaw),
+        0
+      );
       thresholdCoverage[String(thresholdPct)] = {
         coveredSections,
         matchedPortionPercentage: totalSections > 0
-          ? Number(((coveredSections / totalSections) * 100).toFixed(2))
+          ? Number(((coveredContainment / totalSections) * 100).toFixed(2))
           : 0
       };
     });
-    
+
     if (matchedPortionPercentage > SIMILARITY_THRESHOLD) {
       // Delete uploaded file
       fs.unlinkSync(filePath);
-      
-      console.log(`❌ UPLOAD REJECTED: ${matchedPortionPercentage.toFixed(1)}% matched portion exceeds ${SIMILARITY_THRESHOLD}% threshold`);
-      
+
+      console.log(`❌ UPLOAD REJECTED: ${matchedPortionPercentage.toFixed(1)}% of upload is present in the database (threshold ${SIMILARITY_THRESHOLD}%)`);
+
       return res.status(400).json({
         success: false,
         error: 'Upload rejected - High similarity detected',
-        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% of document sections matched existing stored chunks. Threshold is ${SIMILARITY_THRESHOLD}%.`,
+        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% of the uploaded text was found in existing stored documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
         similarity: {
           percentage: matchedPortionPercentage.toFixed(1),
           averageSimilarity: similarityPercentage.toFixed(1),
           threshold: SIMILARITY_THRESHOLD,
           totalSections,
+          coveredSections: coveredSectionCount,
           matchedSections: matchedSectionCount,
           chunkMatchThresholdPct: CHUNK_MATCH_THRESHOLD * 100,
+          metric: 'upload_presence_in_database',
           sectionBestSimilarities,
           thresholdCoverage,
           matchedDocuments: similarDocuments.map(doc => ({
