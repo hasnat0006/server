@@ -133,13 +133,20 @@ class BlockchainConnector {
       await this.initialize();
     }
 
+    if (!documentHash || typeof documentHash !== 'string') {
+      throw new Error(`Failed to verify document: invalid hash "${documentHash}"`);
+    }
+
     try {
       const hashBytes32 = documentHash.startsWith('0x') 
         ? documentHash 
         : '0x' + documentHash;
 
+      console.log(`🔍 Blockchain verifyDocument: checking hash "${hashBytes32}"`);
+
       const exists = await this.contract.documentExists(hashBytes32);
-      
+      console.log(`🔍 Blockchain documentExists returned: ${exists}`);
+
       if (!exists) {
         return {
           exists: false,
@@ -148,7 +155,9 @@ class BlockchainConnector {
       }
 
       const document = await this.contract.getDocument(hashBytes32);
-      
+
+      console.log(`🔍 Blockchain getDocument succeeded: name="${document[1]}", timestamp=${Number(document[3])}`);
+
       return {
         exists: true,
         documentHash: document[0],
@@ -161,7 +170,10 @@ class BlockchainConnector {
         confidenceScore: Number(document[7])
       };
     } catch (error) {
-      throw new Error(`Failed to verify document: ${error.message}`);
+      console.error(`❌❌❌ Blockchain verifyDocument raw error:`, error);
+      console.error(`   Contract address: ${this.contractAddress}`);
+      console.error(`   Document hash: ${documentHash}`);
+      throw new Error(`Failed to verify document on blockchain (contract: ${this.contractAddress}): ${error.message}`);
     }
   }
 

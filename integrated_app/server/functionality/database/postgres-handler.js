@@ -140,12 +140,12 @@ class PostgreSQLHandler {
   async createDocument(documentData) {
     const client = await this.pool.connect();
     try {
-      // Map to Neon DB schema: id, filename, uploaded_at, doc_hash, num_pages, metadata, chunks
+      // Map to Neon DB schema: id, filename, uploaded_at, doc_hash, num_pages, metadata, title, authors, chunks
       const query = `
         INSERT INTO documents (
-          filename, doc_hash, num_pages, metadata
+          filename, doc_hash, num_pages, metadata, title, authors
         )
-        VALUES ($1, $2, $3, $4)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
       `;
 
@@ -155,14 +155,17 @@ class PostgreSQLHandler {
         file_size: documentData.fileSize,
         document_type: documentData.documentType,
         uploader_name: documentData.uploaderName || 'Anonymous',
+        title: documentData.title || '',
         status: documentData.status || 'analyzing'
       };
 
       const values = [
-        documentData.originalName || documentData.fileName, // Use original name as primary filename
+        documentData.originalName || documentData.fileName,
         documentData.documentHash || '',
         0, // num_pages - will be updated later
-        JSON.stringify(metadata)
+        JSON.stringify(metadata),
+        documentData.title || '',
+        documentData.uploaderName || 'Anonymous'
       ];
 
       const result = await client.query(query, values);
@@ -307,6 +310,7 @@ class PostgreSQLHandler {
           document_id, chunk_index, chunk_text, chunk_hash, token_count, embedding, embedding_vector
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (chunk_hash) DO NOTHING
         RETURNING *
       `;
 
@@ -426,6 +430,8 @@ class PostgreSQLHandler {
         SELECT
           c.*,
           d.filename,
+          d.title,
+          d.authors,
           d.metadata as doc_metadata,
           (1 - (c.embedding_vector <=> $1::vector)) as similarity_score,
           'embedding' as similarity_mode

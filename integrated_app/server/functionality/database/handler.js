@@ -24,6 +24,7 @@ class DatabaseHandler {
       fileSize: metadata.file_size,
       documentType: metadata.document_type,
       uploaderName: metadata.uploader_name,
+      title: metadata.title || '',
       status: metadata.status || 'unknown',
       documentHash: row.doc_hash,
       uploadedAt: row.uploaded_at,

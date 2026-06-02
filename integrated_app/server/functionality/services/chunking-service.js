@@ -1,110 +1,122 @@
-const fs = require('fs').promises;
-const path = require('path');
 const crypto = require('crypto');
 const embeddingService = require('./embedding-service');
 
 class ChunkingService {
   constructor(dbHandler) {
     this.dbHandler = dbHandler;
-    this.chunkSize = 900; // max paragraph size before splitting
-    this.chunkOverlap = 120; // overlap for long paragraph splits
+  }
+
+  setOptions(options = {}) {
+    this.options = Object.assign({
+      embeddingThreshold: 0.25,
+      maxResults: 20,
+      minQueryTokens: 5
+    }, options || {});
+  }
+
+  isDOI(text) {
+    if (!text) return false;
+    const t = text.trim();
+    if (/^\s*doi\s*[:]?/i.test(t)) return true;
+    if (/\b10\.\d{2,}(?:\/\S*)?\b/i.test(t)) return true;
+    return false;
+  }
+
+  tokenCount(text) {
+    if (!text) return 0;
+    return text.trim().split(/\s+/).filter(Boolean).length;
   }
 
   /**
-   * Split text into overlapping chunks
+   * Split text into sentence-level chunks, excluding the references section.
    */
   splitIntoChunks(text) {
     const chunks = [];
     let chunkIndex = 0;
+    let input = (text || '').trim();
+    if (!input) return chunks;
 
-    const paragraphs = (text || '')
-      .split(/\n\s*\n+/)
-      .map((paragraph) => paragraph.trim())
-      .filter(Boolean);
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📄 SENTENCE-LEVEL CHUNKING STARTED`);
+    console.log(`${'='.repeat(60)}`);
 
-    paragraphs.forEach((paragraph) => {
-      if (paragraph.length <= this.chunkSize) {
-        chunks.push({
-          index: chunkIndex,
-          content: paragraph,
-          start: null,
-          end: null,
-          length: paragraph.length
-        });
-        chunkIndex++;
-        return;
-      }
+    // Detect and strip the references/bibliography section
+    const refHeaderRe = /^(?:references|bibliography|works\s*cited|literature\s*cited)(?:\s+and\s+\w+)?\s*:?\s*$/im;
+    const refMatch = input.match(refHeaderRe);
+    if (refMatch) {
+      const refStart = refMatch.index;
+      console.log(`📚 Reference section header detected at position ${refStart} — excluding from chunking`);
+      input = input.substring(0, refStart).trim();
+    }
 
-      let startIndex = 0;
-      while (startIndex < paragraph.length) {
-        const endIndex = Math.min(startIndex + this.chunkSize, paragraph.length);
-        const chunkText = paragraph.substring(startIndex, endIndex).trim();
+    // Match sentences: anything up to and including . ! or ?
+    const sentenceRe = /[^.!?]*[.!?]/g;
+    let match;
+    let lastIndex = 0;
 
-        if (chunkText.length > 0) {
-          chunks.push({
-            index: chunkIndex,
-            content: chunkText,
-            start: null,
-            end: null,
-            length: chunkText.length
-          });
-          chunkIndex++;
-        }
+    while ((match = sentenceRe.exec(input)) !== null) {
+      lastIndex = match.index + match[0].length;
+      const sentence = match[0].trim();
+      if (!sentence) continue;
 
-        startIndex += this.chunkSize - this.chunkOverlap;
-      }
-    });
+      const chunk = {
+        index: chunkIndex,
+        content: sentence,
+        start: null,
+        end: null,
+        length: sentence.length
+      };
+      chunks.push(chunk);
+
+      const preview = sentence.length > 90 ? sentence.substring(0, 87) + '...' : sentence;
+      console.log(`  📝 Chunk #${chunkIndex} (${sentence.length} chars): "${preview}"`);
+      chunkIndex++;
+    }
+
+    // Remaining text after last sentence-ending punctuation
+    const remaining = input.substring(lastIndex).trim();
+    if (remaining) {
+      const chunk = {
+        index: chunkIndex,
+        content: remaining,
+        start: null,
+        end: null,
+        length: remaining.length
+      };
+      chunks.push(chunk);
+
+      const preview = remaining.length > 90 ? remaining.substring(0, 87) + '...' : remaining;
+      console.log(`  📝 Chunk #${chunkIndex} (${remaining.length} chars): "${preview}"`);
+      chunkIndex++;
+    }
+
+    console.log(`📊 Total sentence-chunks created: ${chunks.length}`);
+    console.log(`${'='.repeat(60)}\n`);
 
     return chunks;
   }
 
   /**
    * Create simple embedding (word frequency based)
-   * In production, you'd use a proper embedding model
    */
   createSimpleEmbedding(text) {
     const words = text.toLowerCase().match(/\b\w+\b/g) || [];
     const wordFreq = {};
-    
+
     words.forEach(word => {
       wordFreq[word] = (wordFreq[word] || 0) + 1;
     });
 
-    // Create a simple vector (top 100 words by frequency)
     const sortedWords = Object.entries(wordFreq)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 100);
 
-    // Create embedding vector
     const embedding = new Array(100).fill(0);
     sortedWords.forEach(([word, freq], idx) => {
-      embedding[idx] = freq / words.length; // normalize
+      embedding[idx] = freq / words.length;
     });
 
     return embedding;
-  }
-
-  /**
-   * Calculate similarity between two text chunks
-   */
-  calculateSimilarity(text1, text2) {
-    const words1 = new Set(text1.toLowerCase().match(/\b\w+\b/g) || []);
-    const words2 = new Set(text2.toLowerCase().match(/\b\w+\b/g) || []);
-    
-    const intersection = new Set([...words1].filter(x => words2.has(x)));
-    const union = new Set([...words1, ...words2]);
-    
-    return intersection.size / union.size; // Jaccard similarity
-  }
-
-  calculateCoverage(text1, text2) {
-    const words1 = new Set(text1.toLowerCase().match(/\b\w+\b/g) || []);
-    const words2 = new Set(text2.toLowerCase().match(/\b\w+\b/g) || []);
-
-    if (words1.size === 0) return 0;
-
-    const intersection = new Set([...words1].filter(x => words2.has(x)));
-    return intersection.size / words1.size; // coverage of text1 by text2
   }
 
   /**
@@ -113,15 +125,12 @@ class ChunkingService {
   async processDocument(documentId, documentText, metadata = {}) {
     try {
       console.log(`📄 Processing document ${documentId} for chunking...`);
-      
-      // Split into chunks
+
       const chunks = this.splitIntoChunks(documentText);
       console.log(`✂️  Split into ${chunks.length} chunks`);
 
-      // Store each chunk
       const storedChunks = [];
       for (const chunk of chunks) {
-        // Create embeddings
         const embedding = this.createSimpleEmbedding(chunk.content);
         let embeddingVector = null;
         try {
@@ -129,12 +138,9 @@ class ChunkingService {
         } catch (error) {
           console.warn('⚠️  Embedding generation failed:', error.message);
         }
-        
-        // Calculate chunk hash
-        const crypto = require('crypto');
+
         const chunkHash = crypto.createHash('sha256').update(chunk.content).digest('hex');
 
-        // Store in database
         const chunkData = {
           document_id: documentId,
           chunk_index: chunk.index,
@@ -159,57 +165,35 @@ class ChunkingService {
   }
 
   /**
-   * Find similar chunks for plagiarism detection
+   * Find similar chunks using ONLY vector embeddings.
    */
-  async findSimilarChunks(queryText, documentId = null, threshold = 0.3) {
+  async findSimilarChunks(queryText, documentId = null, threshold = null) {
     try {
-      let matches = [];
-      let usedEmbeddingSearch = false;
-
-      try {
-        const queryEmbedding = await embeddingService.embedText(queryText);
-        if (queryEmbedding && queryEmbedding.length) {
-          matches = await this.dbHandler.searchSimilarChunksByEmbedding(queryEmbedding, documentId, 20, threshold);
-          usedEmbeddingSearch = matches.length > 0;
-        }
-      } catch (error) {
-        console.warn('⚠️  Embedding search unavailable:', error.message);
+      const minTokens = (this.options && this.options.minQueryTokens) || 5;
+      if (this.isDOI(queryText) || this.tokenCount(queryText) < minTokens) {
+        console.log(`⏭️ Skipping matching for DOI/short query: "${(queryText||'').toString().substring(0,60)}"`);
+        return [];
       }
 
-      if (!matches.length) {
-        // Fallback to database similarity search
-        matches = await this.dbHandler.searchSimilarChunks(queryText, documentId, 20, threshold);
+      if (!this.options) this.setOptions();
+
+      const queryEmbedding = await embeddingService.embedText(queryText);
+      if (!queryEmbedding || !queryEmbedding.length) {
+        return [];
       }
-      
+
+      const embThreshold = threshold !== null ? threshold : this.options.embeddingThreshold;
+      let matches = await this.dbHandler.searchSimilarChunksByEmbedding(queryEmbedding, documentId, this.options.maxResults, embThreshold);
+
       if (matches && matches.length > 0) {
-        const normalized = matches.map(match => {
-          const baseSimilarity = Number(match.similarity_score || 0);
-          const lexicalSimilarity = this.calculateSimilarity(queryText, match.chunk_text || '');
-          const coverageSimilarity = this.calculateCoverage(queryText, match.chunk_text || '');
-          const useEmbeddingWeights = match.similarity_mode === 'embedding' || usedEmbeddingSearch;
-          const combinedSimilarity = useEmbeddingWeights
-            ? (baseSimilarity * 0.9) + (lexicalSimilarity * 0.1)
-            : (baseSimilarity * 0.7) + (lexicalSimilarity * 0.3);
+        const filtered = matches
+          .map(match => {
+            const sim = Number(match.similarity_score || 0);
+            return { ...match, embeddingSimilarity: sim };
+          })
+          .filter(m => m.embeddingSimilarity >= embThreshold);
 
-          return {
-            ...match,
-            trigramSimilarity: match.similarity_mode === 'trigram' ? baseSimilarity : null,
-            embeddingSimilarity: match.similarity_mode === 'embedding' ? baseSimilarity : null,
-            lexicalSimilarity,
-            coverageSimilarity,
-            combinedSimilarity,
-          };
-        });
-
-        // Stage-2 verification: keep only candidates that also share enough lexical overlap.
-        const filtered = normalized.filter((match) => {
-          const isEmbedding = match.similarity_mode === 'embedding' || usedEmbeddingSearch;
-          const lexicalFloor = isEmbedding ? 0.02 : 0.1;
-          const enforceLexical = isEmbedding && (queryText.length < 250 || (match.chunk_text || '').length < 250);
-          return match.combinedSimilarity >= threshold && (!enforceLexical || match.lexicalSimilarity >= lexicalFloor);
-        });
-
-        console.log(`🔍 Found ${filtered.length} similar chunks from database`);
+        console.log(`🔍 Found ${filtered.length} embedding-similar chunks from database`);
         return filtered.map(match => ({
           query_text: queryText,
           matched_text: match.chunk_text,
@@ -219,20 +203,18 @@ class ChunkingService {
             chunk_index: match.chunk_index || 0,
             chunk_text: match.chunk_text
           },
-          similarity: match.combinedSimilarity,
-          trigramSimilarity: match.trigramSimilarity,
+          similarity: match.embeddingSimilarity,
           embeddingSimilarity: match.embeddingSimilarity,
-          lexicalSimilarity: match.lexicalSimilarity,
-          coverageSimilarity: match.coverageSimilarity,
-          similarityMode: match.similarity_mode || (usedEmbeddingSearch ? 'embedding' : 'trigram'),
-          source_document: match.filename,
+          similarityMode: 'embedding',
+          source_document: match.filename || match.matchedDocument,
           document_id: match.document_id,
           matched_document_id: match.document_id,
-          matched_metadata: match.doc_metadata
+          matched_metadata: match.doc_metadata,
+          matched_title: match.title || '',
+          matched_authors: match.authors || ''
         }));
       }
 
-      // Fallback to manual comparison
       return [];
 
     } catch (error) {
@@ -253,15 +235,15 @@ class ChunkingService {
           FROM chunks c
           JOIN documents d ON c.document_id = d.id
         `;
-        
+
         const values = [];
         if (excludeDocumentId) {
           query += ' WHERE c.document_id != $1';
           values.push(excludeDocumentId);
         }
-        
+
         query += ' ORDER BY c.document_id, c.chunk_index';
-        
+
         const result = await client.query(query, values);
         return result.rows;
       } finally {
@@ -278,7 +260,7 @@ class ChunkingService {
    */
   aggregateMatchesByDocument(matches) {
     const docMatches = {};
-    
+
     matches.forEach(match => {
       const docId = match.document_id;
       if (!docMatches[docId]) {
@@ -290,18 +272,16 @@ class ChunkingService {
           match_count: 0
         };
       }
-      
+
       docMatches[docId].matches.push(match);
       docMatches[docId].total_similarity += match.similarity;
       docMatches[docId].match_count++;
     });
 
-    // Calculate average similarity
     Object.values(docMatches).forEach(doc => {
       doc.average_similarity = doc.total_similarity / doc.match_count;
     });
 
-    // Convert to array and sort
     return Object.values(docMatches)
       .sort((a, b) => b.average_similarity - a.average_similarity);
   }

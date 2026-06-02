@@ -131,28 +131,63 @@ function buildMetadataFingerprint(metadata = {}) {
 }
 
 /**
- * Containment of `text` inside `referenceText` (raw, with repetition).
- * Returns the fraction of `text`'s words that appear in `referenceText`.
- * Used to answer "how much of the uploaded text is present in the database"
- * (as opposed to the Jaccard-style similarity the rest of the system uses).
+ * Directional word-overlap: what fraction of `queryWords`' unique words
+ * appear in `targetText`. Returns 0-1 score.
  */
-function calculateContainment(text, referenceText) {
-  if (!text) return 0;
+/**
+ * Directional phrase-overlap: split both texts by punctuation boundaries
+ * (., !, ?, ;, :, ,) into segments. Each segment between punctuation is treated
+ * as a single unit. Returns the fraction of uploaded segments found in the
+ * database text.
+ *
+ * Segments are normalized: trimmed, lowercased, stripped of list markers
+ * like (1), 1., etc., and whitespace-collapsed before comparison.
+ */
+function calculatePhraseOverlap(queryText, targetText, debug = false) {
+  if (!queryText || !targetText) return 0;
 
-  const sourceWords = (text || '').toLowerCase().match(/\b\w+\b/g) || [];
-  if (sourceWords.length === 0) return 0;
+  const segmentRe = /[.!?;:,]+\s*/;
+  const normalize = (s) =>
+    s.trim()
+      .toLowerCase()
+      .replace(/^\(?\d+\)?\.?\s*/, '')
+      .replace(/\s+/g, ' ');
 
-  const referenceWords = new Set(
-    (referenceText || '').toLowerCase().match(/\b\w+\b/g) || []
+  const querySegments = queryText.split(segmentRe)
+    .map(normalize)
+    .filter(s => s.length >= 10);
+
+  const targetSegments = new Set(
+    targetText.split(segmentRe)
+      .map(normalize)
+      .filter(s => s.length >= 10)
   );
-  if (referenceWords.size === 0) return 0;
 
-  let hits = 0;
-  for (const word of sourceWords) {
-    if (referenceWords.has(word)) hits += 1;
+  if (querySegments.length < 1) return 0;
+
+  let matched = 0;
+  const matchResults = [];
+  for (const segment of querySegments) {
+    const found = targetSegments.has(segment);
+    if (found) matched++;
+    matchResults.push({ segment, found });
   }
 
-  return hits / sourceWords.length;
+  if (debug) {
+    console.log(`  ┌─ PhraseOverlap Debug ────────────────────────────`);
+    console.log(`  │ Upload segments (${querySegments.length}):`);
+    querySegments.forEach((s, i) => {
+      const mark = matchResults[i].found ? '✅' : '❌';
+      const preview = s.length > 70 ? s.substring(0, 67) + '...' : s;
+      console.log(`  │   ${mark} [${i}] "${preview}"`);
+    });
+    console.log(`  │ DB segments (${targetSegments.size}):`);
+    console.log(`  │   (set of unique normalized segments)`);
+    console.log(`  │ Matched: ${matched}/${querySegments.length} = ${(matched / querySegments.length * 100).toFixed(1)}%`);
+    console.log(`  └──────────────────────────────────────────────────`);
+  }
+
+  return matched / querySegments.length;
 }
 
 function metadataTextConsistency(text, metadata = {}) {
@@ -542,7 +577,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     }
 
     const { originalname, filename, path: filePath, size } = req.file;
-    const { documentType, uploaderName } = req.body;
+    const { documentType, uploaderName, title } = req.body;
 
     console.log(`\n📄 New document upload: ${originalname}`);
     console.log(`📦 File size: ${(size / 1024).toFixed(2)} KB`);
@@ -555,10 +590,64 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       originalName: originalname
     });
 
-    // Step 1.5: Check for exact duplicate by hash
+    // Step 1.5: Check blockchain first (source of truth for document existence)
+    // IMPORTANT: If blockchain verification fails (throws), we reject the upload
+    // instead of silently proceeding. This ensures documents already on-chain are
+    // always caught, even if the node has a transient issue on this specific call.
+    let chainVerification = null;
+    console.log(`⛓️  Checking blockchain for document hash: ${xaiResults.documentHash}`);
+    try {
+      chainVerification = await blockchainConnector.verifyDocument(xaiResults.documentHash);
+      console.log(`⛓️  Blockchain verifyDocument response:`, JSON.stringify(chainVerification, null, 2));
+    } catch (chainCheckError) {
+      console.error('❌❌❌ Blockchain verification threw an error:', chainCheckError.message);
+      console.error('Full error details:', chainCheckError.stack || chainCheckError);
+      fs.unlinkSync(filePath);
+      return res.status(503).json({
+        success: false,
+        error: 'Blockchain verification unavailable',
+        message: 'Could not verify document uniqueness on blockchain. The blockchain node may be down or the contract was redeployed. Upload rejected to prevent duplicate entries.',
+        details: chainCheckError.message
+      });
+    }
+
+    if (chainVerification?.exists) {
+      console.log(`❌ BLOCKCHAIN REJECTION: document found on-chain (hash: ${xaiResults.documentHash})`);
+      fs.unlinkSync(filePath);
+      return res.status(400).json({
+        success: false,
+        error: 'Duplicate file detected',
+        message: 'This exact document hash is already anchored on blockchain. Upload rejected.',
+        exactMatch: {
+          type: 'blockchain_hash',
+          uploadedDocument: {
+            name: originalname,
+            hash: xaiResults.documentHash
+          },
+          existingDocument: {
+            id: 'on-chain',
+            name: chainVerification.documentName || originalname,
+            hash: xaiResults.documentHash,
+            uploadedAt: chainVerification.timestamp
+              ? new Date(chainVerification.timestamp * 1000).toISOString()
+              : new Date().toISOString()
+          }
+        },
+        duplicateDocument: {
+          id: 'on-chain',
+          name: chainVerification.documentName || originalname,
+          uploadedAt: chainVerification.timestamp
+            ? new Date(chainVerification.timestamp * 1000).toISOString()
+            : new Date().toISOString()
+        }
+      });
+    }
+    console.log('✅ Blockchain check passed — document not found on chain');
+
+    // Step 1.6: If blockchain says not found, then check database
+    console.log(`🔍 Checking database for document hash: ${xaiResults.documentHash}`);
     const existingDocByHash = await dbHandler.getDocumentByHash(xaiResults.documentHash);
     if (existingDocByHash) {
-      // Delete uploaded file
       fs.unlinkSync(filePath);
       return res.status(400).json({
         success: false,
@@ -585,210 +674,146 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       });
     }
 
-    // Step 1.6: Check exact duplicate on blockchain as an additional guard
-    try {
-      const chainVerification = await blockchainConnector.verifyDocument(xaiResults.documentHash);
-      if (chainVerification?.exists) {
-        fs.unlinkSync(filePath);
-        return res.status(400).json({
-          success: false,
-          error: 'Duplicate file detected',
-          message: 'This exact document hash is already anchored on blockchain. Upload rejected.',
-          exactMatch: {
-            type: 'blockchain_hash',
-            uploadedDocument: {
-              name: originalname,
-              hash: xaiResults.documentHash
-            },
-            existingDocument: {
-              id: 'on-chain',
-              name: chainVerification.documentName || originalname,
-              hash: xaiResults.documentHash,
-              uploadedAt: chainVerification.timestamp
-                ? new Date(chainVerification.timestamp * 1000).toISOString()
-                : new Date().toISOString()
-            }
-          },
-          duplicateDocument: {
-            id: 'on-chain',
-            name: chainVerification.documentName || originalname,
-            uploadedAt: chainVerification.timestamp
-              ? new Date(chainVerification.timestamp * 1000).toISOString()
-              : new Date().toISOString()
-          }
-        });
-      }
-    } catch (chainCheckError) {
-      console.warn('⚠️  Blockchain duplicate pre-check unavailable:', chainCheckError.message);
-    }
-
-    // Step 2: DATABASE-BASED PLAGIARISM DETECTION WITH FUZZY MATCHING
-    console.log('✂️  Starting database-based fuzzy plagiarism detection...');
+    // Step 2: VECTOR-EMBEDDING-BASED SIMILARITY DETECTION
+    console.log('✂️  Starting vector-embedding similarity detection...');
     let maxSimilarity = 0;
-    let fuzzyMatches = [];
+    let allMatches = [];
     let similarDocuments = [];
     let totalSections = 0;
     let matchedSectionCount = 0;
-    let containmentSum = 0;          // sum of best-containment values, one per uploaded chunk
-    let coveredSectionCount = 0;     // # of uploaded chunks whose best-containment >= threshold
-    const CHUNK_MATCH_THRESHOLD = 0.6;
+    let similaritySum = 0;
+    const CANDIDATE_THRESHOLD = 0.4;
+    const HYBRID_THRESHOLD = 0.45;
     let sectionBestSimilarities = [];
-    let exactMatches = [];
-    let exactMatchSummary = [];
 
     try {
       const documentText = xaiResults.documentText || '';
       console.log(`📝 Extracted text length: ${documentText.length} characters`);
 
       if (documentText && documentText.length > 50 && chunkingService) {
-        // Split current document into chunks for comparison
         const currentChunks = chunkingService
           .splitIntoChunks(documentText)
-          .filter((chunk) => chunk.content && chunk.content.length >= 120);
+          .filter((chunk) => chunk.content && chunk.content.length >= 80);
         totalSections = currentChunks.length;
         console.log(`✂️  Split document into ${currentChunks.length} sections`);
 
-        // Compare each chunk against database
-        console.log('🔍 Performing fuzzy matching against stored documents...');
-        const allMatches = [];
+        console.log(`🔍 Finding candidates via embedding (threshold ${CANDIDATE_THRESHOLD}) + scoring via hybrid (embedding + word-overlap)`);
         const matchedSections = new Set();
-        const exactMatchedSections = new Set();
-        const exactDocGroups = {};
 
         for (const chunk of currentChunks) {
-          const chunkHash = crypto.createHash('sha256').update(chunk.content).digest('hex');
-          const exactRows = await dbHandler.findChunksByHash(chunkHash, null, 20);
+          let matches = await chunkingService.findSimilarChunks(chunk.content, null, CANDIDATE_THRESHOLD);
 
-          // Track best-match info for this chunk (used for the per-section report
-          // and the headline "how much of the upload is in the DB" metric).
-          let bestMatch = null;            // strongest fuzzy match (by similarity)
-          let bestMatchText = null;        // matched DB chunk text
-          let bestContainment = 0;         // 0..1, fraction of THIS chunk in the DB match
-          let hasExactMatch = false;
+          console.log(`\n  ┌─ Chunk #${chunk.index + 1} ──────────────────────────────`);
+          console.log(`  │ Uploaded: "${chunk.content.substring(0, 80)}${chunk.content.length > 80 ? '...' : ''}"`);
+          console.log(`  │ Found ${matches.length} embedding candidate(s)`);
 
-          if (exactRows.length > 0) {
-            hasExactMatch = true;
-            exactMatchedSections.add(chunk.index);
-            matchedSections.add(chunk.index);
+          let bestHybridScore = 0;
+          let bestMatchData = null;
 
-            exactRows.forEach((row) => {
-              const matchItem = {
+          for (const match of matches) {
+            const dbText = match.matched_chunk?.content || match.matched_text || '';
+            console.log(`  │`);
+            console.log(`  │ DB match #${match.matched_chunk?.chunk_index || 0}: "${dbText.substring(0, 80)}${dbText.length > 80 ? '...' : ''}"`);
+            console.log(`  │   embeddingSimilarity = ${(match.embeddingSimilarity || 0).toFixed(4)}`);
+
+            const wordOverlap = calculatePhraseOverlap(chunk.content, dbText, true);
+            console.log(`  │   phraseOverlap       = ${(wordOverlap).toFixed(4)}`);
+
+            const embeddingScore = match.embeddingSimilarity || 0;
+
+            const hybridScore = 0.5 * embeddingScore + 0.5 * wordOverlap;
+            console.log(`  │   hybridScore         = 0.5 × ${embeddingScore.toFixed(4)} + 0.5 × ${wordOverlap.toFixed(4)} = ${hybridScore.toFixed(4)}`);
+
+            if (hybridScore >= bestHybridScore) {
+              bestHybridScore = hybridScore;
+              bestMatchData = {
                 yourSection: chunk.index + 1,
-                matchedSection: (row.chunk_index || 0) + 1,
-                matchedDocument: row.filename || row.doc_metadata?.original_name || 'Unknown',
-                matchedDocumentId: row.document_id,
-                chunkHash: chunkHash,
+                yourText: chunk.content,
+                matchedSection: match.matched_chunk?.chunk_index || 0,
+                matchedText: dbText,
+                matchedDocument: match.source_document,
+                matchedDocumentId: match.document_id,
+                matchedTitle: match.matched_title || match.matched_metadata?.title || '',
+                matchedAuthors: match.matched_authors || match.matched_metadata?.uploader_name || '',
+                similarity: hybridScore,
+                embeddingSimilarity: embeddingScore,
+                coverageSimilarity: wordOverlap,
+                similarityMode: 'hybrid-embedding-word-overlap',
+                explanation: hybridScore > 0.8
+                  ? 'Strong match via both semantic and lexical similarity.'
+                  : hybridScore > 0.6
+                  ? 'Good match combining semantic and word overlap.'
+                  : hybridScore > 0.45
+                  ? 'Moderate match from combined scoring.'
+                  : 'Weak match within threshold.'
               };
-
-              exactMatches.push(matchItem);
-
-              if (!exactDocGroups[row.document_id]) {
-                exactDocGroups[row.document_id] = {
-                  documentId: row.document_id,
-                  documentName: row.filename || row.doc_metadata?.original_name || 'Unknown',
-                  exactSections: 0,
-                };
-              }
-              exactDocGroups[row.document_id].exactSections += 1;
-            });
-          }
-
-          const matches = await chunkingService.findSimilarChunks(chunk.content, null, CHUNK_MATCH_THRESHOLD);
-          const bestSimilarity = matches.reduce((max, match) => Math.max(max, match.similarity || 0), 0);
-
-          // Pick the strongest match (and its DB text) so we can measure
-          // how much of THIS uploaded chunk is contained in the DB.
-          if (matches.length > 0) {
-            bestMatch = matches.reduce((a, b) => ((b.similarity || 0) > (a.similarity || 0) ? b : a));
-            bestMatchText = bestMatch.matched_chunk?.content
-              || (typeof bestMatch.matched_chunk === 'string' ? bestMatch.matched_chunk : null)
-              || bestMatch.matched_text
-              || null;
-            if (bestMatchText) {
-              bestContainment = calculateContainment(chunk.content, bestMatchText);
             }
           }
 
-          // Exact-hash hits: the chunk is fully present in the DB by definition.
-          if (hasExactMatch) {
-            bestContainment = 1;
+          // Push only the SINGLE best match per uploaded chunk
+          if (bestMatchData && bestHybridScore >= HYBRID_THRESHOLD) {
+            allMatches.push(bestMatchData);
           }
 
-          // Accumulate the per-chunk best containment; this is what feeds the
-          // "how much of the uploaded text is present in the database" metric.
-          containmentSum += bestContainment;
-          if (bestContainment >= CHUNK_MATCH_THRESHOLD) {
+          console.log(`  │`);
+          console.log(`  │ 🏆 Best hybrid score for this chunk: ${bestHybridScore.toFixed(4)} (${(bestHybridScore * 100).toFixed(1)}%)`);
+          console.log(`  └────────────────────────────────────────────────`);
+
+          similaritySum += bestHybridScore;
+          if (bestHybridScore >= HYBRID_THRESHOLD) {
             matchedSections.add(chunk.index);
-            coveredSectionCount += 1;
           }
 
           sectionBestSimilarities.push({
             section: chunk.index + 1,
-            bestSimilarityRaw: bestSimilarity,
-            bestSimilarityPct: Number((bestSimilarity * 100).toFixed(2)),
-            bestContainmentRaw: Number(bestContainment.toFixed(4)),
-            bestContainmentPct: Number((bestContainment * 100).toFixed(2)),
-            exactMatch: hasExactMatch
-          });
-
-          matches.forEach(match => {
-            if (match.similarity > CHUNK_MATCH_THRESHOLD) {
-              allMatches.push({
-                yourSection: chunk.index + 1,
-                yourText: chunk.content,
-                matchedSection: match.matched_chunk?.chunk_index || 0,
-                matchedText: match.matched_chunk?.content || match.matched_chunk,
-                matchedDocument: match.source_document,
-                matchedDocumentId: match.document_id,
-                similarity: match.similarity,
-                explanation: match.similarity > 0.6
-                  ? 'These sections have high similarity, indicating significant overlap in content.'
-                  : match.similarity > 0.4
-                  ? 'These sections have moderate similarity, sharing some common phrases or concepts.'
-                  : 'These sections have low similarity, with minor commonalities.'
-              });
-            }
+            bestSimilarityRaw: Number(bestHybridScore.toFixed(4)),
+            bestSimilarityPct: Number((bestHybridScore * 100).toFixed(2)),
           });
         }
 
-        exactMatchSummary = Object.values(exactDocGroups)
-          .sort((a, b) => b.exactSections - a.exactSections);
+        console.log(`\n${'═'.repeat(60)}`);
+        console.log(`📊 FINAL SIMILARITY CALCULATION:`);
+        console.log(`   Total sections (chunks): ${totalSections}`);
+        console.log(`   Similarity sum (bestHybridScore per chunk): ${similaritySum.toFixed(4)}`);
+        console.log(`   Average hybrid similarity: ${similaritySum.toFixed(4)} / ${totalSections} = ${(similaritySum / totalSections).toFixed(4)}`);
+        console.log(`   Percentage: ${(similaritySum / totalSections * 100).toFixed(1)}%`);
+        console.log(`   Sections above threshold (${HYBRID_THRESHOLD}): ${matchedSections.size} / ${totalSections}`);
+        console.log(`${'═'.repeat(60)}\n`);
 
         matchedSectionCount = matchedSections.size;
+        console.log(`📊 Found ${allMatches.length} embedding-similar section matches`);
 
-        console.log(`📊 Found ${allMatches.length} section matches`);
+        const docGroups = {};
+        allMatches.forEach(match => {
+          const docId = match.matchedDocumentId;
+          if (!docGroups[docId]) {
+            docGroups[docId] = {
+              document_id: docId,
+              document_name: match.matchedDocument,
+              matches: [],
+              total_similarity: 0,
+              section_count: 0
+            };
+          }
+          docGroups[docId].matches.push(match);
+          docGroups[docId].total_similarity += match.similarity;
+          docGroups[docId].section_count++;
+        });
 
-        if (allMatches.length > 0) {
-          // Group by document
-          const docGroups = {};
-          allMatches.forEach(match => {
-            const docId = match.matchedDocumentId;
-            if (!docGroups[docId]) {
-              docGroups[docId] = {
-                document_id: docId,
-                document_name: match.matchedDocument,
-                matches: [],
-                total_similarity: 0,
-                section_count: 0
-              };
-            }
-            docGroups[docId].matches.push(match);
-            docGroups[docId].total_similarity += match.similarity;
-            docGroups[docId].section_count++;
-          });
-
-          // Calculate average similarity per document
+        if (Object.keys(docGroups).length > 0) {
           similarDocuments = Object.values(docGroups).map(doc => ({
             ...doc,
-            average_similarity: doc.total_similarity / doc.section_count,
+            average_similarity: doc.section_count > 0
+              ? doc.total_similarity / doc.section_count
+              : 0,
             original_name: doc.document_name
           })).sort((a, b) => b.average_similarity - a.average_similarity);
 
           maxSimilarity = similarDocuments[0]?.average_similarity || 0;
-          fuzzyMatches = allMatches.sort((a, b) => b.similarity - a.similarity);
+          allMatches = allMatches.sort((a, b) => b.similarity - a.similarity);
 
-          console.log(`✅ Fuzzy matching complete: ${(maxSimilarity * 100).toFixed(1)}% max similarity`);
-          console.log(`📄 Found ${fuzzyMatches.length} similar sections across ${similarDocuments.length} documents`);
+          console.log(`✅ Matching complete: ${(maxSimilarity * 100).toFixed(1)}% max embedding similarity`);
+          console.log(`📄 Found ${allMatches.length} similar sections across ${similarDocuments.length} documents`);
         } else {
           console.log('✅ No similar documents found in database - appears original');
         }
@@ -796,102 +821,103 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         console.log('⚠️  Database comparison skipped (PostgreSQL not configured or text too short)');
       }
     } catch (chunkError) {
-      console.log('⚠️  Database comparison unavailable, using fallback detection');
-      console.error('Error:', chunkError.message);
+      console.log('⚠️  Database comparison unavailable:', chunkError.message);
     }
 
-    // Step 2.5: CHECK MATCH THRESHOLD
-    // The headline metric is now "how much of the uploaded text is present in
-    // the database" (containment of every uploaded chunk in its best DB match,
-    // averaged across all chunks). This is the user's intended direction:
-    // we measure the upload's presence in the corpus, not the corpus's
-    // presence in the upload.
-    const SIMILARITY_THRESHOLD = 40; // reject if >40% of the upload is in the DB
+    // Step 2.5: CHECK MATCH THRESHOLD (based on average embedding similarity)
+    const SIMILARITY_THRESHOLD = 40;
     const similarityPercentage = maxSimilarity * 100;
     const matchedPortionPercentage = totalSections > 0
-      ? Number(((containmentSum / totalSections) * 100).toFixed(2))
+      ? Number(((similaritySum / totalSections) * 100).toFixed(2))
       : 0;
 
-    // Per-threshold coverage profile, also based on containment so the UI's
-    // interactive slider reflects the new metric consistently.
     const coverageThresholds = [20, 25, 30, 40, 50, 60, 70, 80, 90];
     const thresholdCoverage = {};
     coverageThresholds.forEach((thresholdPct) => {
       const thresholdRaw = thresholdPct / 100;
       const coveredSections = sectionBestSimilarities.filter(
-        (sectionScore) => (sectionScore.bestContainmentRaw || 0) >= thresholdRaw
+        (sectionScore) => (sectionScore.bestSimilarityRaw || 0) >= thresholdRaw
       ).length;
-      const coveredContainment = sectionBestSimilarities.reduce(
-        (sum, sectionScore) => sum + Math.max(sectionScore.bestContainmentRaw || 0, thresholdRaw),
+      const coveredSimilarity = sectionBestSimilarities.reduce(
+        (sum, sectionScore) => sum + Math.max(sectionScore.bestSimilarityRaw || 0, thresholdRaw),
         0
       );
       thresholdCoverage[String(thresholdPct)] = {
         coveredSections,
         matchedPortionPercentage: totalSections > 0
-          ? Number(((coveredContainment / totalSections) * 100).toFixed(2))
+          ? Number(((coveredSimilarity / totalSections) * 100).toFixed(2))
           : 0
       };
     });
 
     if (matchedPortionPercentage > SIMILARITY_THRESHOLD) {
-      // Delete uploaded file
       fs.unlinkSync(filePath);
 
-      console.log(`❌ UPLOAD REJECTED: ${matchedPortionPercentage.toFixed(1)}% of upload is present in the database (threshold ${SIMILARITY_THRESHOLD}%)`);
+      console.log(`❌ UPLOAD REJECTED: ${matchedPortionPercentage.toFixed(1)}% average hybrid similarity (threshold ${SIMILARITY_THRESHOLD}%)`);
+
+      const topMatches = allMatches.slice(0, 10);
+
+      const perSectionMatches = {};
+      for (const m of allMatches) {
+        const sec = m.yourSection || m.yourSection === 0 ? m.yourSection : null;
+        if (sec === null) continue;
+        if (!perSectionMatches[sec]) perSectionMatches[sec] = [];
+        perSectionMatches[sec].push({
+          yourText: m.yourText,
+          matchedText: m.matchedText,
+          matchedDocument: m.matchedDocument,
+          matchedDocumentId: m.matchedDocumentId,
+          matchedTitle: m.matchedTitle || '',
+          matchedAuthors: m.matchedAuthors || '',
+          similarity: m.similarity,
+          embeddingSimilarity: m.embeddingSimilarity
+        });
+      }
 
       return res.status(400).json({
         success: false,
         error: 'Upload rejected - High similarity detected',
-        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% of the uploaded text was found in existing stored documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
+        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% hybrid similarity (embedding + word overlap) with existing stored documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
         similarity: {
           percentage: matchedPortionPercentage.toFixed(1),
           averageSimilarity: similarityPercentage.toFixed(1),
           threshold: SIMILARITY_THRESHOLD,
           totalSections,
-          coveredSections: coveredSectionCount,
           matchedSections: matchedSectionCount,
-          chunkMatchThresholdPct: CHUNK_MATCH_THRESHOLD * 100,
-          metric: 'upload_presence_in_database',
+          metric: 'hybrid_embedding_word_overlap',
           sectionBestSimilarities,
           thresholdCoverage,
           matchedDocuments: similarDocuments.map(doc => ({
+            ...doc,
             name: doc.document_name || doc.original_name || 'Unknown',
             documentId: doc.document_id,
             similarity: (doc.average_similarity * 100).toFixed(1) + '%',
-            matchingChunks: doc.section_count,
-            similarSections: doc.section_count
+            matchingChunks: doc.section_count
           })),
-            exactMatch: {
-              totalExactMatches: exactMatches.length,
-              exactMatchedSections: Array.from(new Set(exactMatches.map((m) => m.yourSection))).length,
-              documents: exactMatchSummary,
-              matches: exactMatches.slice(0, 100)
-            },
-          fuzzyMatches: fuzzyMatches.slice(0, 10) // Top 10 section matches
+          topMatches,
+          perSectionMatches
         }
       });
     }
 
-    // Update XAI results with fuzzy match comparison
     xaiResults.plagiarismCheck = {
       isPlagiarized: matchedPortionPercentage > SIMILARITY_THRESHOLD,
       similarityScore: matchedPortionPercentage,
       matchedPortionPercentage,
       averageSimilarityPercentage: similarityPercentage,
       threshold: SIMILARITY_THRESHOLD,
-      fuzzyMatches: fuzzyMatches.slice(0, 20), // Top 20 matches
       matchedDocuments: similarDocuments,
-      similarSections: fuzzyMatches.length,
+      similarSections: allMatches.length,
       explanation: matchedPortionPercentage > SIMILARITY_THRESHOLD
-        ? `Document rejected: ${matchedPortionPercentage.toFixed(1)}% of sections matched existing chunks (threshold ${SIMILARITY_THRESHOLD}%)`
-        : fuzzyMatches.length > 0
-        ? `Found ${fuzzyMatches.length} similar sections across stored chunks. Matched portion: ${matchedPortionPercentage.toFixed(1)}%, average similarity: ${similarityPercentage.toFixed(1)}%`
+        ? `Document rejected: ${matchedPortionPercentage.toFixed(1)}% average hybrid similarity (threshold ${SIMILARITY_THRESHOLD}%)`
+        : allMatches.length > 0
+        ? `Found ${allMatches.length} similar sections. Average hybrid similarity: ${matchedPortionPercentage.toFixed(1)}%`
         : 'No similar content found - appears original',
-      comparisonMethod: 'fuzzy-vector-matching'
+      comparisonMethod: 'hybrid-embedding-word-overlap'
     };
-    
-    xaiResults.fuzzyMatchResults = {
-      totalMatches: fuzzyMatches.length,
+
+    xaiResults.embeddingMatchResults = {
+      totalMatches: allMatches.length,
       documents: similarDocuments.map(doc => ({
         documentId: doc.document_id,
         documentName: doc.document_name || doc.original_name,
@@ -899,19 +925,12 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         similarSections: doc.section_count,
         matches: doc.matches
       })),
-      topMatches: fuzzyMatches.slice(0, 10),
+      topMatches: allMatches.slice(0, 10),
       totalSections,
       matchedSections: matchedSectionCount,
       matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
-      chunkMatchThresholdPct: CHUNK_MATCH_THRESHOLD * 100,
       sectionBestSimilarities,
-      thresholdCoverage,
-      exactMatch: {
-        totalExactMatches: exactMatches.length,
-        exactMatchedSections: Array.from(new Set(exactMatches.map((m) => m.yourSection))).length,
-        documents: exactMatchSummary,
-        matches: exactMatches.slice(0, 100)
-      }
+      thresholdCoverage
     };
     
     xaiResults.status = matchedPortionPercentage <= SIMILARITY_THRESHOLD ? 'verified' : 'rejected';
@@ -927,6 +946,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       fileSize: size,
       documentType: documentType || 'research_paper',
       uploaderName: uploaderName || 'Anonymous',
+      title: title || '',
       status: xaiResults.status,
       documentHash: xaiResults.documentHash
     });

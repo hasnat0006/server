@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_API_BASE = "http://localhost:5000";
 const ANALYSIS_STEPS = [
@@ -26,43 +26,106 @@ function buildWordSet(text) {
   return new Set(words);
 }
 
-function highlightOverlap(text, referenceText) {
-  if (!text) return text;
+function highlightOverlap(text, referenceText, MIN_PHRASE = 3, markClass = 'bg-yellow-200') {
+  if (!text || !referenceText) return text;
 
-  const wordSet = buildWordSet(referenceText);
-  if (!wordSet.size) return text;
+  // Build reference n-gram set
+  const refWords = (referenceText || '').toLowerCase().match(/\b\w+\b/g) || [];
+  if (refWords.length < MIN_PHRASE) return text;
 
-  const words = Array.from(wordSet)
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegExp);
+  const refNGrams = new Set();
+  for (let i = 0; i <= refWords.length - MIN_PHRASE; i++) {
+    refNGrams.add(refWords.slice(i, i + MIN_PHRASE).join(' '));
+  }
 
-  if (!words.length) return text;
+  // Find source word positions that are in a matching n-gram
+  const srcWords = (text || '').toLowerCase().match(/\b\w+\b/g) || [];
+  if (srcWords.length < MIN_PHRASE) return text;
 
-  const regex = new RegExp(`\\b(${words.join("|")})\\b`, "gi");
-  const parts = text.split(regex);
+  const matchedPositions = new Set();
+  for (let i = 0; i <= srcWords.length - MIN_PHRASE; i++) {
+    const ngram = srcWords.slice(i, i + MIN_PHRASE).join(' ');
+    if (refNGrams.has(ngram)) {
+      for (let j = i; j < i + MIN_PHRASE; j++) matchedPositions.add(j);
+    }
+  }
 
-  return parts.map((part, index) => {
-    if (wordSet.has(part.toLowerCase())) {
-      return (
-        <mark key={index} className="rounded-sm bg-yellow-200 px-0.5 text-slate-900">
-          {part}
+  if (matchedPositions.size === 0) return text;
+
+  // Walk through the original text word-by-word, highlighting matched positions
+  const wordRegex = /\b\w+\b/g;
+  const parts = [];
+  let lastIndex = 0;
+  let wordIdx = 0;
+  let match;
+
+  while ((match = wordRegex.exec(text)) !== null) {
+    const wordStart = match.index;
+    const wordEnd = wordRegex.lastIndex;
+
+    // Non-word text before this word
+    if (wordStart > lastIndex) {
+      parts.push(text.slice(lastIndex, wordStart));
+    }
+
+    if (matchedPositions.has(wordIdx)) {
+      parts.push(
+        <mark key={`m${wordIdx}`} className={`rounded-sm ${markClass} px-0.5 text-slate-900`}>
+          {text.slice(wordStart, wordEnd)}
         </mark>
       );
+    } else {
+      parts.push(text.slice(wordStart, wordEnd));
     }
-    return <span key={index}>{part}</span>;
-  });
+
+    lastIndex = wordEnd;
+    wordIdx++;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
 }
 
 export default function Home() {
   const [file, setFile] = useState(null);
   const [documentType, setDocumentType] = useState("general");
   const [uploaderName, setUploaderName] = useState("");
+  const [title, setTitle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [failureDetails, setFailureDetails] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) setFile(droppedFile);
+  }, []);
+
+  const handleDropZoneClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const apiBase = useMemo(() => {
     return (process.env.NEXT_PUBLIC_SERVER_URL || DEFAULT_API_BASE).replace(/\/$/, "");
@@ -106,10 +169,21 @@ export default function Home() {
       return;
     }
 
+    if (!title.trim()) {
+      setError("Please enter a document title.");
+      return;
+    }
+
+    if (!uploaderName.trim()) {
+      setError("Please enter the author(s) name.");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("document", file);
     formData.append("documentType", documentType);
     formData.append("uploaderName", uploaderName || "Anonymous");
+    formData.append("title", title || "");
 
     setIsSubmitting(true);
     try {
@@ -167,35 +241,82 @@ export default function Home() {
     ? "No risky duplication found. Document is accepted and stored."
     : "Potential duplication was found. Please review the matched sections.";
   const exactMatch = failureDetails?.similarity?.exactMatch || failureDetails?.exactMatch || null;
-  const comparisonMatches = failureDetails?.similarity?.fuzzyMatches || exactMatch?.matches || [];
+  const comparisonMatches =
+    failureDetails?.similarity?.fuzzyMatches || failureDetails?.similarity?.rawTopMatches || exactMatch?.matches || [];
 
   return (
     <main className="mx-auto grid w-full max-w-5xl gap-4 px-4 pb-16 pt-10 sm:px-6">
-      <section className="rounded-2xl border border-emerald-100/80 bg-white/80 p-6 shadow-sm backdrop-blur-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Document Verification</p>
-        <h1 className="mt-2 text-3xl font-semibold leading-tight text-slate-900 sm:text-4xl">Simple Upload Console</h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">
+      <section className="rounded-2xl border border-emerald-100/80 bg-white/80 p-4 shadow-sm backdrop-blur-sm text-center">
+        <p className="text-[30px] font-bold uppercase tracking-[0.05em] text-emerald-700">Document Verification</p>
+        <p className="mx-auto mt-1 max-w-xl text-sm text-slate-500 sm:text-base">
           Upload once, then review AI and blockchain verification in one clean view.
         </p>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <form className="grid gap-4" onSubmit={handleUpload}>
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-slate-700">Document</span>
+          <div
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition ${
+              isDragOver
+                ? "border-emerald-500 bg-emerald-50"
+                : "border-slate-300 bg-white hover:border-emerald-400 hover:bg-emerald-50/50"
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={handleDropZoneClick}
+          >
             <input
+              ref={fileInputRef}
               type="file"
               name="document"
-              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+              className="hidden"
               onChange={(event) => setFile(event.target.files?.[0] || null)}
               required
             />
-            <small className="text-xs text-slate-500">
-              {file ? `Selected: ${file.name}` : "Choose PDF, DOCX, TXT, XLSX, or ZIP."}
-            </small>
-          </label>
+            <svg
+              className={`mb-3 h-10 w-10 ${isDragOver ? "text-emerald-600" : "text-slate-400"}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6h.1a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            {file ? (
+              <div>
+                <p className="text-sm font-medium text-slate-900">{file.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-medium text-slate-700">
+                  Drop your document here, or click to browse
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  PDF, DOCX, TXT, XLSX, or ZIP (max 50 MB)
+                </p>
+              </div>
+            )}
+          </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium text-slate-700">Title</span>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
+                placeholder="e.g. Research Paper Title"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                required
+              />
+            </label>
+
             <label className="grid gap-2">
               <span className="text-sm font-medium text-slate-700">Document type</span>
               <select
@@ -205,18 +326,18 @@ export default function Home() {
               >
                 <option value="general">General</option>
                 <option value="certificate">Certificate</option>
-                <option value="report">Report</option>
               </select>
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium text-slate-700">Uploader name</span>
+              <span className="text-sm font-medium text-slate-700">Authors</span>
               <input
                 type="text"
                 className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-100"
                 placeholder="e.g. Hasnat"
                 value={uploaderName}
                 onChange={(event) => setUploaderName(event.target.value)}
+                required
               />
             </label>
           </div>
@@ -226,9 +347,8 @@ export default function Home() {
             type="submit"
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Analyzing your file..." : "Upload and Analyze"}
+            {isSubmitting ? "Analyzing your file..." : "Analyze and Upload"}
           </button>
-          <p className="text-xs text-slate-500">API: {apiBase}</p>
         </form>
       </section>
 
@@ -351,7 +471,7 @@ export default function Home() {
                         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">Uploaded Text</p>
                         <p className="max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                           {match.yourText
-                            ? highlightOverlap(match.yourText, match.matchedText || "")
+                            ? highlightOverlap(match.yourText, match.matchedText || "", 3, match.debug ? 'bg-pink-200' : 'bg-yellow-200')
                             : "(No uploaded text provided in response)"}
                         </p>
                       </div>
@@ -360,7 +480,7 @@ export default function Home() {
                         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Database Text</p>
                         <p className="max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                           {match.matchedText
-                            ? highlightOverlap(match.matchedText, match.yourText || "")
+                            ? highlightOverlap(match.matchedText, match.yourText || "", 3, match.debug ? 'bg-pink-200' : 'bg-yellow-200')
                             : "(No database text provided in response)"}
                         </p>
                       </div>
@@ -369,6 +489,85 @@ export default function Home() {
                 ))}
               </div>
             </div>
+          ) : null}
+
+          {failureDetails?.similarity?.perSectionMatches ? (
+            (() => {
+              const severityColors = (sim) => {
+                if (sim >= 0.8) return { label: 'High', border: 'border-red-300', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 ring-red-300' };
+                if (sim >= 0.5) return { label: 'Medium', border: 'border-amber-300', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-700 ring-amber-300' };
+                return { label: 'Low', border: 'border-yellow-200', bg: 'bg-yellow-50', badge: 'bg-yellow-100 text-yellow-700 ring-yellow-200' };
+              };
+              const sections = Object.keys(failureDetails.similarity.perSectionMatches);
+              return (
+                <div className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
+                  <div className="mb-3 flex items-baseline gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">Similarity Breakdown</h3>
+                    <span className="text-xs text-slate-500">{sections.length} section{sections.length > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="space-y-4">
+                    {sections.map((secKey) => {
+                      const secIndex = Number(secKey);
+                      const matches = failureDetails.similarity.perSectionMatches[secKey] || [];
+                      const topSim = matches.reduce((max, m) => Math.max(max, m.similarity || 0), 0);
+                      const topColor = severityColors(topSim);
+                      return (
+                        <div key={`sec-${secKey}`} className="rounded-xl border border-slate-200 p-3">
+                          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                            <span className="font-semibold text-slate-800">Section {secIndex}</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5">{matches.length} match{matches.length > 1 ? 'es' : ''}</span>
+                            {topSim > 0 ? (
+                              <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${topColor.badge}`}>
+                                {topColor.label} risk
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
+                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">Uploaded Document</p>
+                              <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                                {matches[0]?.yourText || '(No uploaded text provided)'}
+                              </p>
+                            </div>
+                            <div className="space-y-2">
+                              {matches.map((m, i) => {
+                                const severity = severityColors(m.similarity || 0);
+                                return (
+                                  <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} ${severity.bg} p-3`}>
+                                    <div className="mb-1.5">
+                                      <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                                        {m.matchedTitle || m.matchedDocument || 'Unknown'}
+                                      </p>
+                                      {m.matchedAuthors ? (
+                                        <p className="truncate text-[10px] text-slate-500">
+                                          <span className="text-slate-400">Author:</span> {m.matchedAuthors}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px]">
+                                      <span className={`font-semibold ${severity.badge.split(' ').slice(0, 2).join(' ')}`}>
+                                        {((m.similarity || 0) * 100).toFixed(1)}%
+                                      </span>
+                                      <span className="text-slate-500">match</span>
+                                      <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
+                                        {severity.label}
+                                      </span>
+                                    </div>
+                                    <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                                      {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || '', 3) : '(No DB text)'}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()
           ) : null}
         </section>
       ) : null}
