@@ -40,14 +40,8 @@ class ChunkingService {
     console.log(`📄 SENTENCE-LEVEL CHUNKING STARTED`);
     console.log(`${'='.repeat(60)}`);
 
-    // Detect and strip the references/bibliography section
-    const refHeaderRe = /^(?:references|bibliography|works\s*cited|literature\s*cited)(?:\s+and\s+\w+)?\s*:?\s*$/im;
-    const refMatch = input.match(refHeaderRe);
-    if (refMatch) {
-      const refStart = refMatch.index;
-      console.log(`📚 Reference section header detected at position ${refStart} — excluding from chunking`);
-      input = input.substring(0, refStart).trim();
-    }
+    // Detect and strip the references/bibliography section using multi-strategy detection
+    input = this.stripReferencesSection(input);
 
     // Match sentences: anything up to and including . ! or ?
     const sentenceRe = /[^.!?]*[.!?]/g;
@@ -94,6 +88,123 @@ class ChunkingService {
     console.log(`${'='.repeat(60)}\n`);
 
     return chunks;
+  }
+
+  /**
+   * Detect and strip the references/bibliography section from text.
+   * Uses multiple strategies:
+   *   1. Strong header line detection (numbered prefixes, all caps, colons, dashes, variations)
+   *   2. Citation-density fallback when no explicit header is found
+   * Returns the text with everything from the references section (inclusive) removed.
+   */
+  stripReferencesSection(text) {
+    if (!text) return text;
+
+    const normalized = text.replace(/\r\n?/g, '\n');
+    let lines = normalized.split('\n');
+
+    const preprocessed = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        preprocessed.push(line);
+        continue;
+      }
+
+      const isFragment = /^[A-Za-z]{1,3}$/.test(line);
+      if (isFragment && i + 1 < lines.length) {
+        const next = lines[i + 1].trim();
+        if (next && /^[A-Za-z]/.test(next)) {
+          preprocessed.push(line + next);
+          i++;
+          continue;
+        }
+      }
+
+      preprocessed.push(line);
+    }
+    lines = preprocessed;
+
+    const refKeywords = [
+      'References',
+      'Bibliography',
+      'Works Cited',
+      'Work Cited',
+      'Literature Cited',
+      'Citations',
+      'Citation',
+      'Reference List',
+      'References and Notes',
+      'Reference and Notes',
+      'Cited Works',
+      'Bibliographical References',
+      'Sources',
+      'Reference and Bibliography',
+      'References and Bibliography',
+      'Suggested Reading',
+      'Further Reading'
+    ];
+
+    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const keywordAlternation = refKeywords
+      .map(k => escapeRegex(k).replace(/\s+/g, '\\s+'))
+      .join('|');
+
+    const headerRe = new RegExp(
+      '^\\s*(?:#{1,6}\\s+|\\d{1,3}(?:\\.\\d+)*\\.?|[IVXLCDM]+\\.?|[A-Z]\\.?|\\(\\d+\\)|\\([a-z]\\))?\\s*' +
+      '(?:' + keywordAlternation + ')' +
+      '\\s*[:.\\-—]?\\s*$',
+      'i'
+    );
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      if (headerRe.test(line)) {
+        const beforeHeader = lines.slice(0, i).join('\n').trim();
+        console.log(`📚 Reference header detected at line ${i + 1}: "${line}" — excluding from chunking`);
+        return beforeHeader;
+      }
+    }
+
+    const totalLines = lines.length;
+    if (totalLines < 8) return text;
+
+    const startSearch = Math.floor(totalLines * 0.5);
+    const citationMarkerRe = /^\s*(?:\[\d+\]|\(\d+\)|\d+\.)\s/;
+    const inlineCitationRe = /(?:https?:\/\/|doi:|10\.\d{4,9}\/|\bvol\.?\s*\d+|\bpp?\.?\s*\d+|\bno\.?\s*\d+)/i;
+    const yearRe = /\b(?:19|20)\d{2}\b/;
+
+    let consecutiveCitations = 0;
+    let firstCitationLine = -1;
+    const minConsecutive = 3;
+
+    for (let i = startSearch; i < totalLines; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        consecutiveCitations = 0;
+        firstCitationLine = -1;
+        continue;
+      }
+
+      const hasCitationMarker = citationMarkerRe.test(line);
+      const hasInlineCitation = inlineCitationRe.test(line) && yearRe.test(line);
+
+      if (hasCitationMarker || hasInlineCitation) {
+        if (firstCitationLine === -1) firstCitationLine = i;
+        consecutiveCitations++;
+        if (consecutiveCitations >= minConsecutive) {
+          const beforeRefs = lines.slice(0, firstCitationLine).join('\n').trim();
+          console.log(`📚 Reference section detected by citation pattern starting at line ${firstCitationLine + 1} — excluding from chunking`);
+          return beforeRefs;
+        }
+      } else {
+        consecutiveCitations = 0;
+        firstCitationLine = -1;
+      }
+    }
+
+    return text;
   }
 
   /**

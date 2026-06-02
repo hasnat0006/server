@@ -228,21 +228,45 @@ export default function Home() {
 
   const analysis = result?.data?.xaiAnalysis || result?.data?.verification || {};
   const status = analysis?.status || "unknown";
-  const confidence = analysis?.confidenceScore;
-  const documentHash = analysis?.documentHash || result?.data?.documentHash || "n/a";
   const transactionHash =
     result?.data?.blockchain?.transactionHash || result?.data?.blockchain?.txHash || "not available";
   const resultMessage =
     result?.data?.message ||
     (status === "verified" ? "Document verified successfully." : "Analysis complete.");
   const isVerified = status === "verified";
-  const decisionTitle = isVerified ? "Approved" : "Needs Review";
-  const decisionDescription = isVerified
-    ? "No risky duplication found. Document is accepted and stored."
-    : "Potential duplication was found. Please review the matched sections.";
   const exactMatch = failureDetails?.similarity?.exactMatch || failureDetails?.exactMatch || null;
   const comparisonMatches =
     failureDetails?.similarity?.fuzzyMatches || failureDetails?.similarity?.rawTopMatches || exactMatch?.matches || [];
+  const authorship = result?.data?.authorship || null;
+  const successSimilarity = result?.data?.similarity || null;
+  const mapSectionCount = successSimilarity?.originalChunkCount || successSimilarity?.totalSections || 0;
+  if (typeof window !== "undefined" && successSimilarity) {
+    console.log(`🗺️  Section map input: originalChunkCount=${successSimilarity.originalChunkCount}, totalSections=${successSimilarity.totalSections}, mapSectionCount=${mapSectionCount}`);
+  }
+  const authorshipLevelStyle = !authorship
+    ? { badge: "bg-slate-100 text-slate-700 ring-slate-300", bar: "bg-slate-400" }
+    : authorship.authorshipLevel === "High"
+    ? { badge: "bg-emerald-100 text-emerald-700 ring-emerald-300", bar: "bg-emerald-500" }
+    : authorship.authorshipLevel === "Moderate"
+    ? { badge: "bg-amber-100 text-amber-700 ring-amber-300", bar: "bg-amber-500" }
+    : { badge: "bg-rose-100 text-rose-700 ring-rose-300", bar: "bg-rose-500" };
+
+  const rejectionAuthorship = failureDetails?.authorship || null;
+  const rejectionSimilarity = failureDetails?.similarity || null;
+  const rejectionMapSectionCount = rejectionSimilarity?.originalChunkCount || rejectionSimilarity?.totalSections || 0;
+  const rejectionAuthorshipLevelStyle = !rejectionAuthorship
+    ? { badge: "bg-slate-100 text-slate-700 ring-slate-300", bar: "bg-slate-400" }
+    : rejectionAuthorship.authorshipLevel === "High"
+    ? { badge: "bg-emerald-100 text-emerald-700 ring-emerald-300", bar: "bg-emerald-500" }
+    : rejectionAuthorship.authorshipLevel === "Moderate"
+    ? { badge: "bg-amber-100 text-amber-700 ring-amber-300", bar: "bg-amber-500" }
+    : { badge: "bg-rose-100 text-rose-700 ring-rose-300", bar: "bg-rose-500" };
+
+  function severityColors(sim) {
+    if (sim >= 0.8) return { label: "High", border: "border-red-300", bg: "bg-red-50", badge: "bg-red-100 text-red-700 ring-red-300" };
+    if (sim >= 0.5) return { label: "Medium", border: "border-amber-300", bg: "bg-amber-50", badge: "bg-amber-100 text-amber-700 ring-amber-300" };
+    return { label: "Low", border: "border-yellow-200", bg: "bg-yellow-50", badge: "bg-yellow-100 text-yellow-700 ring-yellow-200" };
+  }
 
   return (
     <main className="mx-auto grid w-full max-w-5xl gap-4 px-4 pb-16 pt-10 sm:px-6">
@@ -406,13 +430,41 @@ export default function Home() {
         </section>
       ) : null}
 
-      {error ? (
-        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
-          <h2 className="text-xl font-semibold text-rose-800">Upload Failed</h2>
-          <p className="mt-2 whitespace-pre-line text-sm text-rose-700">{error}</p>
+      {failureDetails ? (
+        <section className="rounded-2xl border border-rose-300 bg-gradient-to-br from-white via-rose-50/40 to-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold text-slate-900">Final Result</h2>
+            <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-300">
+              Rejected
+            </span>
+          </div>
+          <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
+            {failureDetails.message || error}
+          </p>
+
+          {exactMatch?.existingDocument ? (
+            <article className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
+              <h3 className="text-sm font-semibold text-slate-900">Duplicate Document Detected</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                This document's content has already been stored and verified.
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Uploaded</p>
+                  <p className="mt-1 text-sm text-slate-800">{exactMatch.uploadedDocument?.name}</p>
+                  <p className="break-all font-mono text-[10px] text-slate-500">Hash: {exactMatch.uploadedDocument?.hash}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Existing</p>
+                  <p className="mt-1 text-sm text-slate-800">{exactMatch.existingDocument?.name}</p>
+                  <p className="text-[10px] text-slate-500">Document ID: {exactMatch.existingDocument?.documentId}</p>
+                </div>
+              </div>
+            </article>
+          ) : null}
 
           {exactMatch?.documents?.length ? (
-            <div className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
+            <article className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
               <h3 className="text-sm font-semibold text-slate-900">Exact Match Summary</h3>
               <p className="mt-1 text-xs text-slate-600">
                 Total exact matches: {exactMatch.totalExactMatches ?? exactMatch.matches?.length ?? 0}
@@ -424,193 +476,429 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </article>
           ) : null}
 
-          {exactMatch?.existingDocument ? (
-            <div className="mt-4 rounded-xl border border-rose-200 bg-white p-4 text-sm text-slate-700">
-              <h3 className="font-semibold text-slate-900">Exact Hash Match</h3>
-              <p className="mt-1">Uploaded: {exactMatch.uploadedDocument?.name}</p>
-              <p>Existing: {exactMatch.existingDocument?.name}</p>
-              <p className="break-all font-mono text-xs text-slate-600">Hash: {exactMatch.uploadedDocument?.hash}</p>
-            </div>
-          ) : null}
-
-          {comparisonMatches.length ? (
-            <div className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
-              <h3 className="text-sm font-semibold text-slate-900">Matched Text Comparison</h3>
-              <p className="mt-1 text-xs text-slate-600">
-                Showing top {Math.min(5, comparisonMatches.length)} matched sections (uploaded vs database)
-              </p>
-
-              <div className="mt-3 space-y-3">
-                {comparisonMatches.slice(0, 5).map((match, idx) => (
-                  <article key={`${match.yourSection || idx}-${match.matchedSection || idx}`} className="rounded-xl border border-slate-200 p-3">
-                    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-                      <span className="font-medium text-slate-800">Match #{idx + 1}</span>
-                      <span>Uploaded section: {match.yourSection ?? "n/a"}</span>
-                      <span>DB section: {match.matchedSection ?? "n/a"}</span>
-                      <span>DB doc: {match.matchedDocument || "Unknown"}</span>
-                      {typeof match.similarity === "number" ? (
-                        <span>Similarity: {(match.similarity * 100).toFixed(1)}%</span>
-                      ) : null}
-                      {match.similarityMode ? <span>Mode: {match.similarityMode}</span> : null}
-                      {typeof match.embeddingSimilarity === "number" ? (
-                        <span>Embedding: {(match.embeddingSimilarity * 100).toFixed(1)}%</span>
-                      ) : null}
-                      {typeof match.trigramSimilarity === "number" ? (
-                        <span>Trigram: {(match.trigramSimilarity * 100).toFixed(1)}%</span>
-                      ) : null}
-                      {typeof match.lexicalSimilarity === "number" ? (
-                        <span>Lexical: {(match.lexicalSimilarity * 100).toFixed(1)}%</span>
-                      ) : null}
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">Uploaded Text</p>
-                        <p className="max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                          {match.yourText
-                            ? highlightOverlap(match.yourText, match.matchedText || "", 3, match.debug ? 'bg-pink-200' : 'bg-yellow-200')
-                            : "(No uploaded text provided in response)"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
-                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Database Text</p>
-                        <p className="max-h-40 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                          {match.matchedText
-                            ? highlightOverlap(match.matchedText, match.yourText || "", 3, match.debug ? 'bg-pink-200' : 'bg-yellow-200')
-                            : "(No database text provided in response)"}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                ))}
+          {rejectionAuthorship ? (
+            <article className="mt-4 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-rose-50/40 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Authorship Analysis</h3>
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${rejectionAuthorshipLevelStyle.badge}`}>
+                  {rejectionAuthorship.authorshipLevel} authorship
+                </span>
               </div>
-            </div>
-          ) : null}
 
-          {failureDetails?.similarity?.perSectionMatches ? (
-            (() => {
-              const severityColors = (sim) => {
-                if (sim >= 0.8) return { label: 'High', border: 'border-red-300', bg: 'bg-red-50', badge: 'bg-red-100 text-red-700 ring-red-300' };
-                if (sim >= 0.5) return { label: 'Medium', border: 'border-amber-300', bg: 'bg-amber-50', badge: 'bg-amber-100 text-amber-700 ring-amber-300' };
-                return { label: 'Low', border: 'border-yellow-200', bg: 'bg-yellow-50', badge: 'bg-yellow-100 text-yellow-700 ring-yellow-200' };
-              };
-              const sections = Object.keys(failureDetails.similarity.perSectionMatches);
-              return (
-                <div className="mt-4 rounded-xl border border-rose-200 bg-white p-4">
-                  <div className="mb-3 flex items-baseline gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900">Similarity Breakdown</h3>
-                    <span className="text-xs text-slate-500">{sections.length} section{sections.length > 1 ? 's' : ''}</span>
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-3xl font-bold text-rose-700">{rejectionAuthorship.originalPercentage}%</p>
+                <span className="text-sm text-slate-600">original content</span>
+                <span className="text-xs text-slate-500">
+                  · {rejectionAuthorship.matchedPercentage}% matched with database
+                </span>
+              </div>
+
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200/70">
+                <div
+                  className={`h-full rounded-full ${rejectionAuthorshipLevelStyle.bar} transition-all`}
+                  style={{ width: `${rejectionAuthorship.originalPercentage}%` }}
+                />
+              </div>
+
+              {rejectionSimilarity && rejectionMapSectionCount > 0 ? (
+                <div className="mt-4">
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-xs font-semibold text-slate-700">Document Section Map</p>
+                    <p className="text-[10px] text-slate-500">
+                      {rejectionMapSectionCount} section{rejectionMapSectionCount === 1 ? "" : "s"}
+                    </p>
                   </div>
-                  <div className="space-y-4">
-                    {sections.map((secKey) => {
-                      const secIndex = Number(secKey);
-                      const matches = failureDetails.similarity.perSectionMatches[secKey] || [];
-                      const topSim = matches.reduce((max, m) => Math.max(max, m.similarity || 0), 0);
-                      const topColor = severityColors(topSim);
-                      return (
-                        <div key={`sec-${secKey}`} className="rounded-xl border border-slate-200 p-3">
-                          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                            <span className="font-semibold text-slate-800">Section {secIndex}</span>
-                            <span className="rounded-md bg-slate-100 px-2 py-0.5">{matches.length} match{matches.length > 1 ? 'es' : ''}</span>
-                            {topSim > 0 ? (
-                              <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${topColor.badge}`}>
-                                {topColor.label} risk
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">Uploaded Document</p>
-                              <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                                {matches[0]?.yourText || '(No uploaded text provided)'}
-                              </p>
-                            </div>
-                            <div className="space-y-2">
-                              {matches.map((m, i) => {
-                                const severity = severityColors(m.similarity || 0);
-                                return (
-                                  <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} ${severity.bg} p-3`}>
-                                    <div className="mb-1.5">
-                                      <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
-                                        {m.matchedTitle || m.matchedDocument || 'Unknown'}
-                                      </p>
-                                      {m.matchedAuthors ? (
-                                        <p className="truncate text-[10px] text-slate-500">
-                                          <span className="text-slate-400">Author:</span> {m.matchedAuthors}
-                                        </p>
-                                      ) : null}
-                                    </div>
-                                    <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px]">
-                                      <span className={`font-semibold ${severity.badge.split(' ').slice(0, 2).join(' ')}`}>
-                                        {((m.similarity || 0) * 100).toFixed(1)}%
-                                      </span>
-                                      <span className="text-slate-500">match</span>
-                                      <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
-                                        {severity.label}
-                                      </span>
-                                    </div>
-                                    <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                                      {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || '', 3) : '(No DB text)'}
-                                    </p>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="mt-1.5 rounded-md border border-slate-200 bg-slate-50 p-1.5">
+                    <div
+                      className="grid gap-0.5"
+                      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(12px, 1fr))" }}
+                    >
+                      {Array.from({ length: rejectionMapSectionCount }, (_, i) => i + 1).map((secNum) => {
+                        const matches = rejectionSimilarity.perSectionMatches?.[secNum] || [];
+                        const isMatched = matches.length > 0;
+                        const topSim = isMatched ? matches[0].similarity || 0 : 0;
+                        let bgClass = "bg-emerald-300";
+                        let title = `Section ${secNum} — Original`;
+                        if (isMatched) {
+                          if (topSim >= 0.8) bgClass = "bg-rose-500";
+                          else if (topSim >= 0.5) bgClass = "bg-amber-400";
+                          else bgClass = "bg-yellow-300";
+                          title = `Section ${secNum} — ${(topSim * 100).toFixed(0)}% overlap`;
+                        }
+                        return (
+                          <div
+                            key={`rej-map-${secNum}`}
+                            className={`${bgClass} h-3.5 w-full cursor-help rounded-sm transition hover:brightness-110 hover:ring-1 hover:ring-slate-500`}
+                            title={title}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-emerald-300 ring-1 ring-emerald-400/50" />
+                      <span>Original</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-yellow-300 ring-1 ring-yellow-400/50" />
+                      <span>Low overlap</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-amber-400 ring-1 ring-amber-500/50" />
+                      <span>Medium overlap</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-rose-500 ring-1 ring-rose-600/50" />
+                      <span>High overlap</span>
+                    </span>
                   </div>
                 </div>
-              );
-            })()
+              ) : null}
+
+              <p className="mt-3 text-xs text-slate-600">
+                {rejectionAuthorship.totalSections > 0 ? (
+                  <>
+                    {rejectionAuthorship.originalSections} of {rejectionAuthorship.totalSections} section{rejectionAuthorship.totalSections === 1 ? "" : "s"} accepted as original.
+                    {rejectionAuthorship.matchedSections > 0
+                      ? ` ${rejectionAuthorship.matchedSections} section${rejectionAuthorship.matchedSections === 1 ? "" : "s"} flagged with existing documents.`
+                      : " No sections flagged."}
+                  </>
+                ) : (
+                  "Document text was too short to perform section-level analysis."
+                )}
+              </p>
+
+              {rejectionAuthorship.contributors && rejectionAuthorship.contributors.length > 0 ? (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-slate-700">Contributing documents</p>
+                  <ul className="mt-1.5 space-y-1.5 text-xs text-slate-600">
+                    {rejectionAuthorship.contributors.slice(0, 5).map((c) => (
+                      <li key={c.documentId} className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span className="font-medium text-slate-800">{c.documentName}</span>
+                        {c.authors ? <span className="text-slate-500">by {c.authors}</span> : null}
+                        <span className="text-slate-400">·</span>
+                        <span>{c.similarSections} section{c.similarSections === 1 ? "" : "s"}</span>
+                        <span className="text-slate-400">·</span>
+                        <span>avg {c.averageSimilarity}</span>
+                        <span className="text-slate-400">·</span>
+                        <span>{c.contributionPercentage}% of document</span>
+                      </li>
+                    ))}
+                    {rejectionAuthorship.contributors.length > 5 ? (
+                      <li className="text-slate-500">+ {rejectionAuthorship.contributors.length - 5} more contributor(s)</li>
+                    ) : null}
+                  </ul>
+                </div>
+              ) : null}
+            </article>
           ) : null}
+
+          {rejectionSimilarity && rejectionSimilarity.perSectionMatches && Object.keys(rejectionSimilarity.perSectionMatches).length > 0 ? (
+            <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                Show matched sections ({Object.keys(rejectionSimilarity.perSectionMatches).length})
+              </summary>
+              <p className="mt-1 text-xs text-slate-600">
+                These sections exceeded the similarity threshold with previously stored documents.
+              </p>
+              <div className="mt-3 space-y-4">
+                {Object.keys(rejectionSimilarity.perSectionMatches).map((secKey) => {
+                  const secIndex = Number(secKey);
+                  const matches = rejectionSimilarity.perSectionMatches[secKey] || [];
+                  const topSim = matches.reduce((max, m) => Math.max(max, m.similarity || 0), 0);
+                  const topColor = severityColors(topSim);
+                  return (
+                    <div key={`rej-sec-${secKey}`} className="rounded-xl border border-slate-200 p-3">
+                      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-800">Section {secIndex}</span>
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5">
+                          {matches.length} match{matches.length > 1 ? "es" : ""}
+                        </span>
+                        {topSim > 0 ? (
+                          <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${topColor.badge}`}>
+                            {topColor.label} overlap
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                            Uploaded Document
+                          </p>
+                          <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                            {matches[0]?.yourText || "(No uploaded text provided)"}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          {matches.map((m, i) => {
+                            const severity = severityColors(m.similarity || 0);
+                            return (
+                              <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} ${severity.bg} p-3`}>
+                                <div className="mb-1.5">
+                                  <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                                    {m.matchedTitle || m.matchedDocument || "Unknown"}
+                                  </p>
+                                  {m.matchedAuthors ? (
+                                    <p className="truncate text-[10px] text-slate-500">
+                                      <span className="text-slate-400">Author:</span> {m.matchedAuthors}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px]">
+                                  <span className={`font-semibold ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
+                                    {((m.similarity || 0) * 100).toFixed(1)}%
+                                  </span>
+                                  <span className="text-slate-500">match</span>
+                                  <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
+                                    {severity.label}
+                                  </span>
+                                </div>
+                                <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                                  {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || "", 3) : "(No DB text)"}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          ) : null}
+        </section>
+      ) : error ? (
+        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+          <h2 className="text-xl font-semibold text-rose-800">Upload Failed</h2>
+          <p className="mt-2 whitespace-pre-line text-sm text-rose-700">{error}</p>
         </section>
       ) : null}
 
       {result ? (
-        <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm sm:p-6">
-          <h2 className="text-xl font-semibold text-slate-900">Final Result</h2>
+        <section className={`rounded-2xl border p-5 shadow-sm sm:p-6 ${isVerified ? "border-emerald-300 bg-gradient-to-br from-white via-emerald-50/40 to-white" : "border-slate-200 bg-white"}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold text-slate-900">Final Result</h2>
+            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${isVerified ? "bg-emerald-100 text-emerald-700 ring-emerald-300" : "bg-rose-100 text-rose-700 ring-rose-300"}`}>
+              {isVerified ? "Accepted" : "Rejected"}
+            </span>
+          </div>
           <p className="mt-2 text-sm text-slate-600">{resultMessage}</p>
 
-          <article className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Plain-English Summary</h3>
-            <p className="mt-2 text-xl font-semibold text-slate-900">{decisionTitle}</p>
-            <p className="mt-1 text-sm text-slate-600">{decisionDescription}</p>
-          </article>
+          {authorship ? (
+            <article className="mt-4 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-emerald-50/40 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">Authorship Analysis</h3>
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${authorshipLevelStyle.badge}`}>
+                  {authorship.authorshipLevel} authorship
+                </span>
+              </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className="text-3xl font-bold text-emerald-700">{authorship.originalPercentage}%</p>
+                <span className="text-sm text-slate-600">original content</span>
+                <span className="text-xs text-slate-500">
+                  · {authorship.matchedPercentage}% matched with database
+                </span>
+              </div>
+
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200/70">
+                <div
+                  className={`h-full rounded-full ${authorshipLevelStyle.bar} transition-all`}
+                  style={{ width: `${authorship.originalPercentage}%` }}
+                />
+              </div>
+
+              {successSimilarity && mapSectionCount > 0 ? (
+                <div className="mt-4">
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-xs font-semibold text-slate-700">Document Section Map</p>
+                    <p className="text-[10px] text-slate-500">
+                      {mapSectionCount} section{mapSectionCount === 1 ? "" : "s"}
+                      {/* {successSimilarity.originalChunkCount && successSimilarity.totalSections < successSimilarity.originalChunkCount
+                        ? ` · ${successSimilarity.totalSections} analyzed`
+                        : ""} */}
+                    </p>
+                  </div>
+                  <div className="mt-1.5 rounded-md border border-slate-200 bg-slate-50 p-1.5">
+                    <div
+                      className="grid gap-0.5"
+                      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(12px, 1fr))" }}
+                    >
+                      {Array.from({ length: mapSectionCount }, (_, i) => i + 1).map((secNum) => {
+                        const matches = successSimilarity.perSectionMatches?.[secNum] || [];
+                        const isMatched = matches.length > 0;
+                        const topSim = isMatched ? matches[0].similarity || 0 : 0;
+                        let bgClass = "bg-emerald-300";
+                        let title = `Section ${secNum} — Original (accepted)`;
+                        if (isMatched) {
+                          if (topSim >= 0.8) bgClass = "bg-rose-500";
+                          else if (topSim >= 0.5) bgClass = "bg-amber-400";
+                          else bgClass = "bg-yellow-300";
+                          title = `Section ${secNum} — ${(topSim * 100).toFixed(0)}% overlap`;
+                        }
+                        return (
+                          <div
+                            key={`map-${secNum}`}
+                            className={`${bgClass} h-3.5 w-full cursor-help rounded-sm transition hover:brightness-110 hover:ring-1 hover:ring-slate-500`}
+                            title={title}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-emerald-300 ring-1 ring-emerald-400/50" />
+                      <span>Accepted (original)</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-yellow-300 ring-1 ring-yellow-400/50" />
+                      <span>Low overlap</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-amber-400 ring-1 ring-amber-500/50" />
+                      <span>Medium overlap</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-3 w-4 rounded-sm bg-rose-500 ring-1 ring-rose-600/50" />
+                      <span>High overlap</span>
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              <p className="mt-3 text-xs text-slate-600">
+                {authorship.totalSections > 0 ? (
+                  <>
+                    {authorship.originalSections} of {authorship.totalSections} section{authorship.totalSections === 1 ? "" : "s"} accepted as original.
+                    {authorship.matchedSections > 0
+                      ? ` ${authorship.matchedSections} section${authorship.matchedSections === 1 ? "" : "s"} flagged with existing documents.`
+                      : " No sections flagged."}
+                  </>
+                ) : (
+                  "Document text was too short to perform section-level analysis."
+                )}
+              </p>
+
+              {authorship.contributors && authorship.contributors.length > 0 ? (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-slate-700">Contributing documents</p>
+                  <ul className="mt-1.5 space-y-1.5 text-xs text-slate-600">
+                    {authorship.contributors.slice(0, 5).map((c) => (
+                      <li key={c.documentId} className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span className="font-medium text-slate-800">{c.documentName}</span>
+                        {c.authors ? <span className="text-slate-500">by {c.authors}</span> : null}
+                        <span className="text-slate-400">·</span>
+                        <span>{c.similarSections} section{c.similarSections === 1 ? "" : "s"}</span>
+                        <span className="text-slate-400">·</span>
+                        <span>avg {c.averageSimilarity}</span>
+                        <span className="text-slate-400">·</span>
+                        <span>{c.contributionPercentage}% of document</span>
+                      </li>
+                    ))}
+                    {authorship.contributors.length > 5 ? (
+                      <li className="text-slate-500">+ {authorship.contributors.length - 5} more contributor(s)</li>
+                    ) : null}
+                  </ul>
+                </div>
+              ) : null}
+            </article>
+          ) : null}
+
+          {/* <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <article className={`rounded-xl border p-3 ${isVerified ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-slate-50/70"}`}>
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Decision</h3>
-              <p className="mt-1.5 text-base font-semibold text-slate-900">{isVerified ? "Accepted" : "Rejected"}</p>
+              <p className={`mt-1.5 text-base font-semibold ${isVerified ? "text-emerald-700" : "text-rose-700"}`}>
+                {isVerified ? "Accepted" : "Rejected"}
+              </p>
             </article>
             <article className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Confidence</h3>
-              <p className="mt-1.5 text-base font-semibold text-slate-900">{confidence ?? "n/a"}%</p>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Blockchain</h3>
+              <p className="mt-1.5 truncate font-mono text-xs text-slate-900" title={transactionHash}>
+                {transactionHash === "not available" ? "Not anchored" : `${transactionHash.slice(0, 14)}…${transactionHash.slice(-8)}`}
+              </p>
             </article>
-          </div>
+          </div> */}
 
-          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-slate-800">Show technical details</summary>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <article className="rounded-lg border border-slate-200 bg-white p-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Internal status</h3>
-                <p className="mt-1.5 text-sm font-semibold text-slate-900">{status}</p>
-              </article>
-              <article className="rounded-lg border border-slate-200 bg-white p-3">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Document hash</h3>
-                <p className="mt-1.5 break-all font-mono text-xs text-slate-900">{documentHash}</p>
-              </article>
-              <article className="rounded-lg border border-slate-200 bg-white p-3 md:col-span-2">
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Blockchain transaction</h3>
-                <p className="mt-1.5 break-all font-mono text-xs text-slate-900">{transactionHash}</p>
-              </article>
-            </div>
-          </details>
+          {successSimilarity && successSimilarity.perSectionMatches && Object.keys(successSimilarity.perSectionMatches).length > 0 ? (
+            <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                Show matched sections ({Object.keys(successSimilarity.perSectionMatches).length})
+              </summary>
+              <p className="mt-1 text-xs text-slate-600">
+                These sections overlapped with previously stored documents but the overall similarity stayed within the acceptance threshold.
+              </p>
+              <div className="mt-3 space-y-4">
+                {Object.keys(successSimilarity.perSectionMatches).map((secKey) => {
+                  const secIndex = Number(secKey);
+                  const matches = successSimilarity.perSectionMatches[secKey] || [];
+                  const topSim = matches.reduce((max, m) => Math.max(max, m.similarity || 0), 0);
+                  const topColor = severityColors(topSim);
+                  return (
+                    <div key={`success-sec-${secKey}`} className="rounded-xl border border-slate-200 p-3">
+                      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-800">Section {secIndex}</span>
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5">
+                          {matches.length} match{matches.length > 1 ? "es" : ""}
+                        </span>
+                        {topSim > 0 ? (
+                          <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${topColor.badge}`}>
+                            {topColor.label} overlap
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                            Uploaded Document
+                          </p>
+                          <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                            {matches[0]?.yourText || "(No uploaded text provided)"}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          {matches.map((m, i) => {
+                            const severity = severityColors(m.similarity || 0);
+                            return (
+                              <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} ${severity.bg} p-3`}>
+                                <div className="mb-1.5">
+                                  <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                                    {m.matchedTitle || m.matchedDocument || "Unknown"}
+                                  </p>
+                                  {m.matchedAuthors ? (
+                                    <p className="truncate text-[10px] text-slate-500">
+                                      <span className="text-slate-400">Author:</span> {m.matchedAuthors}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px]">
+                                  <span className={`font-semibold ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
+                                    {((m.similarity || 0) * 100).toFixed(1)}%
+                                  </span>
+                                  <span className="text-slate-500">match</span>
+                                  <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
+                                    {severity.label}
+                                  </span>
+                                </div>
+                                <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                                  {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || "", 3) : "(No DB text)"}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          ) : null}
         </section>
       ) : null}
     </main>

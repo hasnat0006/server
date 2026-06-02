@@ -680,10 +680,12 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     let allMatches = [];
     let similarDocuments = [];
     let totalSections = 0;
+    let originalChunkCount = 0;
     let matchedSectionCount = 0;
     let similaritySum = 0;
     const CANDIDATE_THRESHOLD = 0.4;
     const HYBRID_THRESHOLD = 0.45;
+    const EMBEDDING_FAST_PATH_THRESHOLD = 0.7;
     let sectionBestSimilarities = [];
 
     try {
@@ -691,11 +693,11 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       console.log(`📝 Extracted text length: ${documentText.length} characters`);
 
       if (documentText && documentText.length > 50 && chunkingService) {
-        const currentChunks = chunkingService
-          .splitIntoChunks(documentText)
-          .filter((chunk) => chunk.content && chunk.content.length >= 80);
+        const allChunks = chunkingService.splitIntoChunks(documentText);
+        originalChunkCount = allChunks.length;
+        const currentChunks = allChunks.filter((chunk) => chunk.content && chunk.content.length >= 80);
         totalSections = currentChunks.length;
-        console.log(`✂️  Split document into ${currentChunks.length} sections`);
+        console.log(`✂️  Split document into ${originalChunkCount} chunks (${totalSections} analyzed after length filter)`);
 
         console.log(`🔍 Finding candidates via embedding (threshold ${CANDIDATE_THRESHOLD}) + scoring via hybrid (embedding + word-overlap)`);
         const matchedSections = new Set();
@@ -712,14 +714,19 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
 
           for (const match of matches) {
             const dbText = match.matched_chunk?.content || match.matched_text || '';
+            const embeddingScore = match.embeddingSimilarity || 0;
+
             console.log(`  │`);
             console.log(`  │ DB match #${match.matched_chunk?.chunk_index || 0}: "${dbText.substring(0, 80)}${dbText.length > 80 ? '...' : ''}"`);
-            console.log(`  │   embeddingSimilarity = ${(match.embeddingSimilarity || 0).toFixed(4)}`);
+            console.log(`  │   embeddingSimilarity = ${embeddingScore.toFixed(4)}`);
 
-            const wordOverlap = calculatePhraseOverlap(chunk.content, dbText, true);
-            console.log(`  │   phraseOverlap       = ${(wordOverlap).toFixed(4)}`);
-
-            const embeddingScore = match.embeddingSimilarity || 0;
+            let wordOverlap = 0;
+            if (embeddingScore < EMBEDDING_FAST_PATH_THRESHOLD) {
+              console.log(`  │   phraseOverlap       = SKIPPED (fast path: embedding < ${EMBEDDING_FAST_PATH_THRESHOLD})`);
+            } else {
+              wordOverlap = calculatePhraseOverlap(chunk.content, dbText, true);
+              console.log(`  │   phraseOverlap       = ${wordOverlap.toFixed(4)}`);
+            }
 
             const hybridScore = 0.5 * embeddingScore + 0.5 * wordOverlap;
             console.log(`  │   hybridScore         = 0.5 × ${embeddingScore.toFixed(4)} + 0.5 × ${wordOverlap.toFixed(4)} = ${hybridScore.toFixed(4)}`);
@@ -738,7 +745,9 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
                 similarity: hybridScore,
                 embeddingSimilarity: embeddingScore,
                 coverageSimilarity: wordOverlap,
-                similarityMode: 'hybrid-embedding-word-overlap',
+                similarityMode: embeddingScore < EMBEDDING_FAST_PATH_THRESHOLD
+                  ? 'embedding-only-fast-path'
+                  : 'hybrid-embedding-word-overlap',
                 explanation: hybridScore > 0.8
                   ? 'Strong match via both semantic and lexical similarity.'
                   : hybridScore > 0.6
@@ -874,28 +883,58 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         });
       }
 
+      const originalSections = totalSections - matchedSectionCount;
+      const originalPercentage = totalSections > 0
+        ? Number(((originalSections / totalSections) * 100).toFixed(2))
+        : 0;
+      const matchedPercentage = Number(matchedPortionPercentage.toFixed(2));
+
+      let rejectionAuthorshipLevel = 'Low';
+      if (originalPercentage >= 80) rejectionAuthorshipLevel = 'High';
+      else if (originalPercentage >= 60) rejectionAuthorshipLevel = 'Moderate';
+
+      const rejectionContributors = similarDocuments.map(doc => {
+        const contribPct = totalSections > 0
+          ? Number(((doc.section_count / totalSections) * 100).toFixed(2))
+          : 0;
+        return {
+          documentId: doc.document_id,
+          documentName: doc.document_name || doc.original_name || 'Unknown',
+          authors: (doc.matches && doc.matches[0] && doc.matches[0].matchedAuthors) || '',
+          similarSections: doc.section_count,
+          averageSimilarity: (doc.average_similarity * 100).toFixed(1) + '%',
+          contributionPercentage: contribPct
+        };
+      });
+
       return res.status(400).json({
         success: false,
         error: 'Upload rejected - High similarity detected',
         message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% hybrid similarity (embedding + word overlap) with existing stored documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
         similarity: {
-          percentage: matchedPortionPercentage.toFixed(1),
-          averageSimilarity: similarityPercentage.toFixed(1),
-          threshold: SIMILARITY_THRESHOLD,
           totalSections,
+          originalChunkCount,
           matchedSections: matchedSectionCount,
-          metric: 'hybrid_embedding_word_overlap',
+          matchedPortionPercentage: Number(matchedPortionPercentage.toFixed(2)),
           sectionBestSimilarities,
           thresholdCoverage,
+          perSectionMatches,
+          topMatches,
           matchedDocuments: similarDocuments.map(doc => ({
-            ...doc,
-            name: doc.document_name || doc.original_name || 'Unknown',
             documentId: doc.document_id,
+            documentName: doc.document_name || doc.original_name || 'Unknown',
             similarity: (doc.average_similarity * 100).toFixed(1) + '%',
             matchingChunks: doc.section_count
-          })),
-          topMatches,
-          perSectionMatches
+          }))
+        },
+        authorship: {
+          totalSections,
+          originalSections,
+          matchedSections: matchedSectionCount,
+          originalPercentage,
+          matchedPercentage,
+          authorshipLevel: rejectionAuthorshipLevel,
+          contributors: rejectionContributors
         }
       });
     }
@@ -931,6 +970,59 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
       sectionBestSimilarities,
       thresholdCoverage
+    };
+
+    const acceptedPerSectionMatches = {};
+    for (const m of allMatches) {
+      const sec = m.yourSection;
+      if (sec === null || sec === undefined) continue;
+      if (!acceptedPerSectionMatches[sec]) acceptedPerSectionMatches[sec] = [];
+      acceptedPerSectionMatches[sec].push({
+        yourText: m.yourText,
+        matchedText: m.matchedText,
+        matchedDocument: m.matchedDocument,
+        matchedDocumentId: m.matchedDocumentId,
+        matchedTitle: m.matchedTitle || '',
+        matchedAuthors: m.matchedAuthors || '',
+        similarity: m.similarity,
+        embeddingSimilarity: m.embeddingSimilarity,
+        coverageSimilarity: m.coverageSimilarity
+      });
+    }
+    xaiResults.embeddingMatchResults.perSectionMatches = acceptedPerSectionMatches;
+
+    const originalSections = totalSections - matchedSectionCount;
+    const originalPercentage = totalSections > 0
+      ? Number(((originalSections / totalSections) * 100).toFixed(2))
+      : 100;
+    const matchedPercentage = Number((100 - originalPercentage).toFixed(2));
+
+    let authorshipLevel = 'High';
+    if (originalPercentage < 60) authorshipLevel = 'Low';
+    else if (originalPercentage < 80) authorshipLevel = 'Moderate';
+
+    const contributors = similarDocuments.map(doc => {
+      const contributionPct = totalSections > 0
+        ? Number(((doc.section_count / totalSections) * 100).toFixed(2))
+        : 0;
+      return {
+        documentId: doc.document_id,
+        documentName: doc.document_name || doc.original_name || 'Unknown',
+        authors: (doc.matches && doc.matches[0] && doc.matches[0].matchedAuthors) || '',
+        similarSections: doc.section_count,
+        averageSimilarity: (doc.average_similarity * 100).toFixed(1) + '%',
+        contributionPercentage: contributionPct
+      };
+    });
+
+    const authorship = {
+      totalSections,
+      originalSections,
+      matchedSections: matchedSectionCount,
+      originalPercentage,
+      matchedPercentage,
+      authorshipLevel,
+      contributors
     };
     
     xaiResults.status = matchedPortionPercentage <= SIMILARITY_THRESHOLD ? 'verified' : 'rejected';
@@ -999,6 +1091,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     });
 
     // Return response
+    console.log(`📤 Final response values: originalChunkCount=${originalChunkCount}, totalSections=${totalSections}, matchedSections=${matchedSectionCount}`);
     res.json({
       success: true,
       data: {
@@ -1006,8 +1099,24 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         originalName: originalname,
         blockchain: blockchainData,
         xaiAnalysis: xaiResults,
-        message: xaiResults.status === 'verified' 
-          ? 'Document verified and registered on blockchain!' 
+        similarity: {
+          totalSections,
+          originalChunkCount,
+          matchedSections: matchedSectionCount,
+          matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
+          sectionBestSimilarities,
+          perSectionMatches: acceptedPerSectionMatches,
+          matchedDocuments: similarDocuments.map(doc => ({
+            documentId: doc.document_id,
+            documentName: doc.document_name || doc.original_name || 'Unknown',
+            similarity: (doc.average_similarity * 100).toFixed(1) + '%',
+            matchingChunks: doc.section_count
+          })),
+          topMatches: allMatches.slice(0, 10)
+        },
+        authorship,
+        message: xaiResults.status === 'verified'
+          ? 'Document verified and registered on blockchain!'
           : 'Document analysis complete but not verified.'
       }
     });
