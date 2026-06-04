@@ -11,10 +11,20 @@ const XLSX = require('xlsx');
 
 let pdfParse = null;
 try {
-  // Loaded lazily-safe in case dependency installation is incomplete.
-  pdfParse = require('pdf-parse');
-} catch (_) {
-  pdfParse = null;
+  // pdf-parse v1.x has a debug-mode side effect in its index.js that
+  // reads ./test/data/05-versions-space.pdf from the current working dir.
+  // Requiring the lib entry directly bypasses that side effect.
+  pdfParse = require('pdf-parse/lib/pdf-parse.js');
+  console.log('[document-parser] loaded pdf-parse from lib entry');
+} catch (e) {
+  console.warn('[document-parser] failed to load pdf-parse/lib:', e.message);
+  try {
+    pdfParse = require('pdf-parse');
+    console.log('[document-parser] loaded pdf-parse from index');
+  } catch (e2) {
+    console.warn('[document-parser] failed to load pdf-parse:', e2.message);
+    pdfParse = null;
+  }
 }
 
 class DocumentParser {
@@ -75,20 +85,30 @@ class DocumentParser {
   }
 
   /**
-   * Parse PDF using pdf-parse (pure Node.js)
+   * Parse PDF using pdf-parse (pure Node.js) with pdftotext fallback.
    */
   static async parsePDF(filePath) {
-    if (!pdfParse) {
-      throw new Error('pdf-parse is not installed. Run: npm install pdf-parse');
+    if (pdfParse) {
+      try {
+        const dataBuffer = fs.readFileSync(filePath);
+        const data = await pdfParse(dataBuffer);
+        const text = (data?.text || '').trim();
+        if (text) return text;
+      } catch (error) {
+        console.warn(`[document-parser] pdf-parse failed, falling back to pdftotext: ${error.message}`);
+      }
     }
 
-    try {
-      const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdfParse(dataBuffer);
-      return (data?.text || '').trim();
-    } catch (error) {
-      throw new Error(`PDF parsing failed: ${error.message}`);
-    }
+    const { execFile } = require('child_process');
+    const text = await new Promise((resolve, reject) => {
+      execFile('pdftotext', ['-q', '-layout', filePath, '-'], { maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) {
+          return reject(new Error(`pdftotext failed: ${err.message}${stderr ? ' | ' + stderr : ''}`));
+        }
+        resolve(stdout);
+      });
+    });
+    return (text || '').trim();
   }
 
   /**

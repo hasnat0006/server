@@ -12,6 +12,10 @@ const xaiAnalyzer = require('./functionality/xai/real-analyzer');
 const dbHandler = require('./functionality/database/handler');
 const ChunkingService = require('./functionality/services/chunking-service');
 const DocumentParser = require('./utils/document-parser');
+const { requireOrgAuth } = require('./middleware/org-auth');
+const { requireAdmin } = require('./middleware/admin-auth');
+const ocrService = require('./functionality/services/ocr-service');
+const fieldExtractor = require('./functionality/services/certificate-field-extractor');
 
 const app = express();
 const BASE_PORT = parseInt(process.env.SERVER_PORT || process.env.PORT || '5000', 10);
@@ -94,6 +98,32 @@ const smallDocUpload = multer({
     }
 
     cb(new Error('Unsupported small-document format. Use PDF/PNG/JPG/WEBP files.'));
+  }
+});
+
+const certUpload = multer({
+  storage: multer.diskStorage({
+    destination: function (req, file, cb) {
+      const certDir = path.join(__dirname, 'uploads', 'certificates');
+      if (!fs.existsSync(certDir)) {
+        fs.mkdirSync(certDir, { recursive: true });
+      }
+      cb(null, certDir);
+    },
+    filename: function (req, file, cb) {
+      const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const ext = path.extname(safe).toLowerCase();
+      const base = path.basename(safe, ext).slice(0, 40) || 'cert';
+      cb(null, `${base}-${Date.now()}${ext}`);
+    }
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /pdf|png|jpg|jpeg|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    if (extname || allowedMimeTypes.includes(file.mimetype)) return cb(null, true);
+    cb(new Error('Unsupported certificate format. Use PDF/PNG/JPG/WEBP files.'));
   }
 });
 
@@ -349,6 +379,907 @@ app.get('/api/blockchain/status', async (req, res) => {
   } catch (error) {
     console.error('Blockchain status error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+function generateApiKey() {
+  const random = crypto.randomBytes(24).toString('hex');
+  return `ck_live_${random}`;
+}
+
+function slugifyOrgId(name) {
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'ORG';
+}
+
+app.post('/api/organizations/register', requireAdmin, async (req, res) => {
+  try {
+    const { name, orgId: providedOrgId, contactEmail } = req.body || {};
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Organization name is required.' });
+    }
+
+    const baseOrgId = (providedOrgId && providedOrgId.trim()) || slugifyOrgId(name);
+    let orgId = baseOrgId;
+    let suffix = 1;
+    while (await dbHandler.findOrganizationByOrgId(orgId)) {
+      suffix += 1;
+      orgId = `${baseOrgId}-${suffix}`;
+      if (suffix > 999) {
+        return res.status(500).json({ success: false, error: 'Could not allocate a unique org_id.' });
+      }
+    }
+
+    const apiKey = generateApiKey();
+    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    const apiKeyPrefix = apiKey.slice(0, 12);
+
+    const created = await dbHandler.createOrganization({
+      orgId,
+      name: name.trim(),
+      apiKeyHash,
+      apiKeyPrefix,
+      contactEmail: contactEmail || null,
+      isActive: true
+    });
+
+    console.log(`🏢 Organization registered: ${created.org_id} (${created.name})`);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        orgId: created.org_id,
+        name: created.name,
+        contactEmail: created.contact_email,
+        apiKey,
+        apiKeyPrefix: created.api_key_prefix,
+        message: 'Save this API key now. It will not be shown again.'
+      }
+    });
+  } catch (error) {
+    console.error('Organization registration error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/organizations/me', requireOrgAuth, async (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      orgId: req.org.orgId,
+      name: req.org.name,
+      contactEmail: req.org.contactEmail,
+      isActive: req.org.isActive,
+      createdAt: req.org.createdAt
+    }
+  });
+});
+
+function generateCertificateId() {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = crypto.randomBytes(3).toString('hex').toUpperCase();
+  return `CERT-${ts}-${rand}`;
+}
+
+function parseCanonicalPayload(body) {
+  const data = body || {};
+  let fields = {};
+  if (typeof data.fields === 'string') {
+    try { fields = JSON.parse(data.fields); } catch (_) { fields = {}; }
+  } else if (data.fields && typeof data.fields === 'object') {
+    fields = data.fields;
+  }
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return {
+    recipient_name: (fields.recipient_name || '').toString().trim(),
+    course_or_title: (fields.course_or_title || '').toString().trim(),
+    issue_date: (fields.issue_date || '').toString().trim() || todayIso,
+    certificate_serial: (fields.certificate_serial || '').toString().trim(),
+    additional_fields: fields.additional_fields && typeof fields.additional_fields === 'object' ? fields.additional_fields : {}
+  };
+}
+
+function validateCanonicalPayload(payload) {
+  const errors = [];
+  if (!payload.recipient_name) errors.push('recipient_name is required');
+  if (payload.issue_date && Number.isNaN(Date.parse(payload.issue_date))) {
+    errors.push('issue_date is not a valid date');
+  }
+  return errors;
+}
+
+function buildCanonicalForHash(payload) {
+  return {
+    recipient_name: payload.recipient_name,
+    course_or_title: payload.course_or_title,
+    issue_date: payload.issue_date,
+    certificate_serial: payload.certificate_serial,
+    issuer_name: payload.issuer_name
+  };
+}
+
+app.post('/api/certificates/issue', requireOrgAuth, certUpload.single('document'), async (req, res) => {
+  const uploadedPath = req.file?.path || null;
+  const storedFilePath = uploadedPath;
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No certificate file uploaded.' });
+    }
+
+    const payload = parseCanonicalPayload(req.body);
+    const errors = validateCanonicalPayload(payload);
+    if (errors.length) {
+      return res.status(400).json({ success: false, error: 'Invalid payload.', details: errors });
+    }
+    payload.issuer_name = req.org.name;
+
+    const fileHash = await calculateFileHash(uploadedPath);
+    const canonicalForHash = buildCanonicalForHash(payload);
+    const canonicalFingerprint = fieldExtractor.buildCanonicalFingerprint(canonicalForHash);
+
+    const existingBySerial = payload.certificate_serial
+      ? await dbHandler.findCertificateBySerial(req.org.orgId, payload.certificate_serial)
+      : null;
+    if (existingBySerial) {
+      return res.status(409).json({
+        success: false,
+        error: 'Duplicate certificate serial for this organization.',
+        existing: {
+          certificateId: existingBySerial.certificate_id,
+          fileHash: existingBySerial.file_hash,
+          status: existingBySerial.status
+        }
+      });
+    }
+
+    const existingByHash = await dbHandler.findCertificateByFileHash(fileHash);
+    if (existingByHash) {
+      return res.status(409).json({
+        success: false,
+        error: 'This exact file has already been registered as a certificate.',
+        existing: {
+          certificateId: existingByHash.certificate_id,
+          issuerName: existingByHash.issuer_name,
+          fileHash: existingByHash.file_hash
+        }
+      });
+    }
+
+    let ocr = { text: '', confidence: null, engine: null };
+    try {
+      ocr = await ocrService.extractText(uploadedPath);
+    } catch (e) {
+      console.warn('OCR failed during issuance:', e.message);
+    }
+
+    const certificateId = generateCertificateId();
+    const newExt = path.extname(uploadedPath).toLowerCase();
+    const permanentDir = path.join(__dirname, 'uploads', 'certificates');
+    if (!fs.existsSync(permanentDir)) fs.mkdirSync(permanentDir, { recursive: true });
+    const permanentPath = path.join(permanentDir, `${certificateId}${newExt}`);
+    try {
+      fs.renameSync(uploadedPath, permanentPath);
+    } catch (e) {
+      fs.copyFileSync(uploadedPath, permanentPath);
+      fs.unlinkSync(uploadedPath);
+    }
+
+    let blockchain = null;
+    try {
+      const txResult = await blockchainConnector.registerDocument({
+        documentName: `CERT-${certificateId}`,
+        documentHash: fileHash,
+        xaiAnalysis: JSON.stringify({
+          flow: 'certificate_issuance',
+          orgId: req.org.orgId,
+          certificateId,
+          canonicalFingerprint,
+          recipientNameHash: crypto.createHash('sha256').update(payload.recipient_name).digest('hex'),
+          issueDate: payload.issue_date,
+          certificateSerial: payload.certificate_serial
+        }),
+        confidenceScore: 95
+      });
+      blockchain = {
+        transactionHash: txResult.transactionHash,
+        blockNumber: txResult.blockNumber,
+        contractAddress: txResult.contractAddress,
+        network: 'hardhat-local',
+        anchoredAt: new Date().toISOString()
+      };
+    } catch (e) {
+      console.warn('Blockchain anchoring failed during issuance:', e.message);
+    }
+
+    const issuedAt = new Date().toISOString();
+    const documentBuffer = fs.readFileSync(permanentPath);
+    const documentMime = req.file.mimetype || 'application/octet-stream';
+    const documentFilename = `${certificateId}${newExt}`;
+    const created = await dbHandler.createCertificate({
+      certificateId,
+      orgId: req.org.orgId,
+      issuerName: payload.issuer_name,
+      recipientName: payload.recipient_name,
+      courseOrTitle: payload.course_or_title,
+      issueDate: payload.issue_date,
+      certificateSerial: payload.certificate_serial,
+      additionalFields: payload.additional_fields,
+      canonicalFingerprint,
+      fileHash,
+      filePath: permanentPath,
+      documentData: documentBuffer,
+      documentMime,
+      documentFilename,
+      ocrText: ocr.text,
+      ocrEngine: ocr.engine,
+      ocrConfidence: ocr.confidence,
+      blockchain,
+      status: 'active',
+      issuedAt
+    });
+
+    const verifyBase = `${req.protocol}://${req.get('host')}`;
+    const qrPayload = {
+      certificateId,
+      issuerName: payload.issuer_name,
+      recipientName: payload.recipient_name,
+      fileHash,
+      verifyUrl: `${verifyBase}/api/certificates/${certificateId}`
+    };
+
+    console.log(`🎓 Certificate issued: ${certificateId} by ${req.org.orgId}`);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        certificateId,
+        orgId: req.org.orgId,
+        issuerName: payload.issuer_name,
+        recipientName: payload.recipient_name,
+        courseOrTitle: payload.course_or_title,
+        issueDate: payload.issue_date,
+        certificateSerial: payload.certificate_serial,
+        fileHash,
+        canonicalFingerprint,
+        blockchain,
+        documentUrl: `${req.protocol}://${req.get('host')}/api/certificates/${certificateId}/document`,
+        ocr: {
+          engine: ocr.engine,
+          confidence: ocr.confidence,
+          textLength: ocr.text.length
+        },
+        qrPayload,
+        qrImageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(JSON.stringify(qrPayload))}`,
+        verifyUrl: qrPayload.verifyUrl,
+        issuedAt
+      }
+    });
+  } catch (error) {
+    console.error('Certificate issuance error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (uploadedPath && fs.existsSync(uploadedPath) && uploadedPath !== storedFilePath) {
+      try { fs.unlinkSync(uploadedPath); } catch (_) {}
+    }
+  }
+});
+
+app.post('/api/certificates/:certId/revoke', requireOrgAuth, async (req, res) => {
+  try {
+    const { certId } = req.params;
+    const reason = (req.body?.reason || '').toString().trim() || null;
+
+    const existing = await dbHandler.findCertificateById(certId);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Certificate not found.' });
+    }
+    if (existing.org_id !== req.org.orgId) {
+      return res.status(403).json({ success: false, error: 'You can only revoke certificates from your own organization.' });
+    }
+    if (existing.status === 'revoked') {
+      return res.status(400).json({ success: false, error: 'Certificate is already revoked.' });
+    }
+
+    const revoked = await dbHandler.revokeCertificate(certId, { reason });
+    res.json({
+      success: true,
+      data: {
+        certificateId: revoked.certificate_id,
+        status: revoked.status,
+        revokedAt: revoked.revoked_at,
+        revocationReason: revoked.revocation_reason
+      }
+    });
+  } catch (error) {
+    console.error('Certificate revoke error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/certificates', requireOrgAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+    const status = req.query.status ? String(req.query.status) : null;
+
+    const base = `${req.protocol}://${req.get('host')}`;
+    const rows = await dbHandler.listCertificatesByOrg(req.org.orgId, { limit, offset, status });
+    const certs = rows.map((c) => ({
+      certificateId: c.certificate_id,
+      orgId: c.org_id,
+      issuerName: c.issuer_name,
+      recipientName: c.recipient_name,
+      courseOrTitle: c.course_or_title,
+      issueDate: c.issue_date,
+      certificateSerial: c.certificate_serial,
+      fileHash: c.file_hash,
+      canonicalFingerprint: c.canonical_fingerprint,
+      status: c.status,
+      blockchain: c.blockchain,
+      issuedAt: c.issued_at,
+      revokedAt: c.revoked_at,
+      revocationReason: c.revocation_reason,
+      documentUrl: `${base}/api/certificates/${c.certificate_id}/document`,
+      hasDocument: Boolean(c.document_data)
+    }));
+
+    res.json({ success: true, data: { certificates: certs, limit, offset } });
+  } catch (error) {
+    console.error('Certificate list error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+function publicCertProjection(c, req, { includeOcr = false } = {}) {
+  const base = req ? `${req.protocol}://${req.get('host')}` : '';
+  const out = {
+    certificateId: c.certificate_id,
+    orgId: c.org_id,
+    issuerName: c.issuer_name,
+    recipientName: c.recipient_name,
+    courseOrTitle: c.course_or_title,
+    issueDate: c.issue_date,
+    certificateSerial: c.certificate_serial,
+    fileHash: c.file_hash,
+    canonicalFingerprint: c.canonical_fingerprint,
+    status: c.status,
+    issuedAt: c.issued_at,
+    revokedAt: c.revoked_at,
+    revocationReason: c.revocation_reason,
+    blockchain: c.blockchain,
+    documentUrl: base ? `${base}/api/certificates/${c.certificate_id}/document` : `/api/certificates/${c.certificate_id}/document`,
+    hasDocument: Boolean(c.document_data)
+  };
+  if (includeOcr) {
+    out.ocrText = c.ocr_text || null;
+    out.ocrEngine = c.ocr_engine || null;
+  }
+  return out;
+}
+
+app.get('/api/certificates/by-hash/:hash', async (req, res) => {
+  try {
+    const cert = await dbHandler.findCertificateByFileHash(req.params.hash);
+    if (!cert) {
+      return res.status(404).json({ success: false, error: 'No certificate found with that file hash.' });
+    }
+    res.json({ success: true, data: publicCertProjection(cert, req) });
+  } catch (error) {
+    console.error('Certificate by-hash error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/certificates/:certId', async (req, res) => {
+  try {
+    const cert = await dbHandler.findCertificateById(req.params.certId);
+    if (!cert) {
+      return res.status(404).json({ success: false, error: 'Certificate not found.' });
+    }
+    res.json({ success: true, data: publicCertProjection(cert, req) });
+  } catch (error) {
+    console.error('Certificate get error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/certificates/:certId/document', async (req, res) => {
+  try {
+    const cert = await dbHandler.findCertificateById(req.params.certId);
+    if (!cert) {
+      return res.status(404).json({ success: false, error: 'Certificate not found.' });
+    }
+    if (!cert.document_data) {
+      return res.status(404).json({ success: false, error: 'No document stored for this certificate.' });
+    }
+    const mime = cert.document_mime || 'application/octet-stream';
+    const filename = cert.document_filename || `${cert.certificate_id}.bin`;
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', cert.document_data.length);
+    res.send(cert.document_data);
+  } catch (error) {
+    console.error('Document fetch error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+function inferDateFormatVariants(dateStr) {
+  if (!dateStr) return [];
+  const variants = new Set([dateStr]);
+  const d = new Date(dateStr);
+  if (!Number.isNaN(d.getTime())) {
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    variants.add(`${yyyy}-${mm}-${dd}`);
+    variants.add(`${dd}/${mm}/${yyyy}`);
+    variants.add(`${mm}/${dd}/${yyyy}`);
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const monthShort = monthNames[d.getUTCMonth()].slice(0, 3);
+    variants.add(`${dd} ${monthNames[d.getUTCMonth()]} ${yyyy}`);
+    variants.add(`${d.getUTCDate()}${ordinalSuffix(d.getUTCDate())} day of ${monthNames[d.getUTCMonth()]}, ${yyyy}`);
+    variants.add(`${monthShort} ${d.getUTCDate()}, ${yyyy}`);
+  }
+  return Array.from(variants);
+}
+
+function ordinalSuffix(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th';
+  switch (n % 10) {
+    case 1: return 'st';
+    case 2: return 'nd';
+    case 3: return 'rd';
+    default: return 'th';
+  }
+}
+
+function isDateMatch(storedDate, extractedDate) {
+  if (!storedDate || !extractedDate) return false;
+  if (storedDate === extractedDate) return true;
+  const variants = new Set(inferDateFormatVariants(storedDate));
+  for (const v of variants) {
+    if (fieldExtractor.normalizeForFingerprint(v) === fieldExtractor.normalizeForFingerprint(extractedDate)) return true;
+  }
+  return false;
+}
+
+function findTextLocation(text, target) {
+  if (!text || !target) return null;
+  const norm = fieldExtractor.normalizeForFingerprint(target);
+  if (!norm) return null;
+  const lowerText = text.toLowerCase();
+  const lines = text.split(/\r?\n/);
+  const normLines = lines.map((l) => fieldExtractor.normalizeForFingerprint(l));
+
+  const dateVariants = inferDateFormatVariants(target).map((v) => fieldExtractor.normalizeForFingerprint(v));
+  const candidates = [norm, ...dateVariants.filter((v) => v && v !== norm)];
+
+  for (const cand of candidates) {
+    for (let i = 0; i < normLines.length; i++) {
+      if (normLines[i] === cand) {
+        return { lineNumber: i + 1, snippet: lines[i].trim() };
+      }
+    }
+  }
+  for (const cand of candidates) {
+    for (let i = 0; i < normLines.length; i++) {
+      if (normLines[i].includes(cand)) {
+        return { lineNumber: i + 1, snippet: lines[i].trim() };
+      }
+    }
+  }
+
+  const words = norm.split(' ').filter((w) => w.length >= 5);
+  if (words.length === 0) return null;
+  const sorted = [...words].sort((a, b) => b.length - a.length);
+  for (let i = 0; i < normLines.length; i++) {
+    if (sorted.some((w) => normLines[i].includes(w))) {
+      return { lineNumber: i + 1, snippet: lines[i].trim() };
+    }
+  }
+  return null;
+}
+
+function buildXaiAnalysis({ verdict, matchedBy, fieldComparison, mismatchedFields, exactFields, fuzzyFields, forgeryCheck, chainStatus, matchedRecord, fileHash }) {
+  const reasons = [];
+  const evidence = [];
+  const recommendations = [];
+
+  if (verdict === 'authentic') {
+    reasons.push({
+      type: 'positive',
+      message: `Verified against the canonical record stored in the database (matched by ${matchedBy.replace(/_/g, ' ')}).`
+    });
+    if (matchedBy === 'file_hash') {
+      reasons.push({
+        type: 'positive',
+        message: 'The uploaded file is byte-for-byte identical to the original registered certificate.'
+      });
+    } else {
+      const matchedFields = exactFields.map((f) => f.field);
+      reasons.push({
+        type: 'positive',
+        message: `Canonical fields match exactly: ${matchedFields.join(', ')}.`
+      });
+    }
+    if (chainStatus === 'on_chain') {
+      reasons.push({
+        type: 'positive',
+        message: 'File hash is anchored on the blockchain (immutable proof of registration).'
+      });
+    } else if (chainStatus === 'not_on_current_chain') {
+      recommendations.push('The blockchain reference is from a previous chain session. Consider re-anchoring on the current chain.');
+    }
+  } else if (verdict === 'tampered') {
+    if (mismatchedFields.length > 0) {
+      const fieldLocations = mismatchedFields.map((row) => {
+        const loc = findTextLocation(matchedRecord.ocr_text, row.expected);
+        return {
+          field: row.field,
+          expected: row.expected,
+          found: row.found,
+          location: loc,
+          severity: 'high'
+        };
+      });
+      reasons.push({
+        type: 'critical',
+        message: `${mismatchedFields.length} field${mismatchedFields.length === 1 ? '' : 's'} differ${mismatchedFields.length === 1 ? 's' : ''} from the registered record.`
+      });
+      evidence.push({
+        type: 'field_differences',
+        items: fieldLocations
+      });
+      const hasName = mismatchedFields.some((f) => f.field === 'recipient_name');
+      const hasDate = mismatchedFields.some((f) => f.field === 'issue_date');
+      const hasIssuer = mismatchedFields.some((f) => f.field === 'issuer_name');
+      const hasSerial = mismatchedFields.some((f) => f.field === 'certificate_serial');
+      if (hasName) {
+        recommendations.push('The recipient name on the document does not match the registered record. This is the most common sign of certificate forgery.');
+      }
+      if (hasDate) {
+        recommendations.push('The issue date does not match. Forged certificates often alter dates to backdate or extend validity.');
+      }
+      if (hasIssuer) {
+        recommendations.push('The issuing institution name does not match. Verify the document actually came from the claimed organization.');
+      }
+      if (hasSerial) {
+        recommendations.push('The certificate serial number has been changed. Each certificate should have a unique serial as registered.');
+      }
+    } else {
+      reasons.push({
+        type: 'critical',
+        message: 'The document could not be conclusively matched to the registered record.'
+      });
+      evidence.push({
+        type: 'low_overlap',
+        message: 'Too few fields matched the stored record. This may indicate a significantly altered document.'
+      });
+    }
+  } else if (verdict === 'revoked') {
+    reasons.push({
+      type: 'critical',
+      message: 'This certificate has been revoked by the issuing organization.'
+    });
+    if (matchedRecord.revocation_reason) {
+      reasons.push({
+        type: 'info',
+        message: `Revocation reason: ${matchedRecord.revocation_reason}`
+      });
+    }
+    evidence.push({
+      type: 'revocation',
+      revokedAt: matchedRecord.revoked_at
+    });
+  } else if (verdict === 'suspicious') {
+    reasons.push({
+      type: 'warning',
+      message: 'Some fields matched but not enough to confirm authenticity. Manual review recommended.'
+    });
+    evidence.push({
+      type: 'partial_match',
+      exactCount: exactFields.length,
+      fuzzyCount: fuzzyFields.length
+    });
+  } else if (verdict === 'unknown') {
+    reasons.push({
+      type: 'warning',
+      message: 'No matching certificate found in the database.'
+    });
+    recommendations.push('This certificate may not have been registered with any organization, or the identifying data could not be extracted.');
+  } else if (verdict === 'not_a_certificate') {
+    reasons.push({
+      type: 'critical',
+      message: 'The uploaded file does not appear to be a certificate.'
+    });
+    if (forgeryCheck?.missingSignals) {
+      evidence.push({
+        type: 'missing_signals',
+        items: forgeryCheck.missingSignals
+      });
+    }
+  }
+
+  let confidence;
+  if (verdict === 'authentic') confidence = 95;
+  else if (verdict === 'revoked') confidence = 99;
+  else if (verdict === 'tampered') confidence = 90;
+  else if (verdict === 'not_a_certificate') confidence = 85;
+  else if (verdict === 'suspicious') confidence = 60;
+  else confidence = 30;
+
+  return {
+    summary: `Verdict: ${verdict} (${confidence}% confidence)`,
+    reasons,
+    evidence,
+    recommendations,
+    confidence,
+    modelVersion: 'xai-cert-verify-v1',
+    generatedAt: new Date().toISOString()
+  };
+}
+
+app.post('/api/certificates/verify', certUpload.single('document'), async (req, res) => {
+  const uploadedPath = req.file?.path || null;
+  const originalPath = uploadedPath;
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No certificate file uploaded.' });
+    }
+
+    const hintCertId = (req.body?.certificateId || '').toString().trim() || null;
+    const hintSerial = (req.body?.certificateSerial || '').toString().trim() || null;
+
+    const fileHash = await calculateFileHash(uploadedPath);
+
+    let ocr = { text: '', confidence: null, engine: null };
+    try {
+      ocr = await ocrService.extractText(uploadedPath);
+    } catch (e) {
+      console.warn('OCR failed during verification:', e.message);
+    }
+
+    const extracted = fieldExtractor.extractAllFields(ocr.text);
+    const extractedCanonical = fieldExtractor.fieldsToCanonical(extracted);
+    const extractedFingerprint = fieldExtractor.buildCanonicalFingerprint(extractedCanonical);
+
+    let forgeryCheck = null;
+    try {
+      forgeryCheck = await xaiAnalyzer.runCertificateForgeryCheck(uploadedPath, ocr.text);
+    } catch (e) {
+      console.warn('Forgery check failed during verification:', e.message);
+    }
+
+    let matchedRecord = null;
+    let matchedBy = null;
+    if (hintCertId) {
+      matchedRecord = await dbHandler.findCertificateById(hintCertId);
+      if (matchedRecord) matchedBy = 'certificateId';
+    }
+    if (!matchedRecord) {
+      matchedRecord = await dbHandler.findCertificateByFileHash(fileHash);
+      if (matchedRecord) matchedBy = 'file_hash';
+    }
+    if (!matchedRecord && extractedCanonical.certificate_serial) {
+      const bySerial = await dbHandler.findCertificateBySerialAny(extractedCanonical.certificate_serial).catch(() => null);
+      if (bySerial) {
+        matchedRecord = bySerial;
+        matchedBy = 'extracted_serial';
+      }
+    }
+    if (!matchedRecord && hintSerial) {
+      const bySerial = await dbHandler.findCertificateBySerialAny(hintSerial).catch(() => null);
+      if (bySerial) {
+        matchedRecord = bySerial;
+        matchedBy = 'hint_serial';
+      }
+    }
+    if (!matchedRecord) {
+      matchedRecord = await dbHandler.findCertificateByFingerprint(extractedFingerprint);
+      if (matchedRecord) matchedBy = 'canonical_fingerprint';
+    }
+
+    if (!matchedRecord) {
+      try { fs.unlinkSync(uploadedPath); } catch (_) {}
+      const looksLikeCert = forgeryCheck && !forgeryCheck.isForged;
+      const missingSignals = forgeryCheck?.missingSignals || [];
+      return res.json({
+        success: true,
+        data: {
+          verdict: looksLikeCert ? 'unknown' : 'not_a_certificate',
+          matchedBy: null,
+          uploaded: {
+            fileHash,
+            ocrEngine: ocr.engine,
+            ocrConfidence: ocr.confidence,
+            extractedFields: extractedCanonical,
+            extractedFingerprint
+          },
+          stored: null,
+          fieldComparison: [],
+          checks: {
+            blockchainAuthentic: false,
+            hashMatched: false,
+            fingerprintMatched: false,
+            serialMatched: false,
+            forgeryRiskLevel: forgeryCheck ? (forgeryCheck.isForged ? 'high' : 'low') : 'unknown',
+            forgeryRiskScore: forgeryCheck ? (forgeryCheck.isForged ? 80 : 10) : null,
+            missingSignals
+          },
+          mismatches: [],
+          message: looksLikeCert
+            ? 'No matching certificate found. This file is not registered, or its data does not match any issued certificate.'
+            : `This file does not appear to be a certificate. Missing signals: ${missingSignals.join(', ') || 'multiple'}.`
+        }
+      });
+    }
+
+    const stored = {
+      recipient_name: matchedRecord.recipient_name,
+      course_or_title: matchedRecord.course_or_title,
+      issue_date: matchedRecord.issue_date
+        ? (matchedRecord.issue_date instanceof Date
+            ? `${matchedRecord.issue_date.getFullYear()}-${String(matchedRecord.issue_date.getMonth() + 1).padStart(2, '0')}-${String(matchedRecord.issue_date.getDate()).padStart(2, '0')}`
+            : String(matchedRecord.issue_date).slice(0, 10))
+        : null,
+      certificate_serial: matchedRecord.certificate_serial,
+      issuer_name: matchedRecord.issuer_name
+    };
+    const diff = fieldExtractor.compareFields(stored, extractedCanonical);
+    const fieldComparison = diff.fieldComparison.map((row) => {
+      if (row.field === 'issue_date') {
+        if (isDateMatch(stored.issue_date, row.found)) {
+          return { ...row, status: 'date_format_match' };
+        }
+      }
+      return row;
+    });
+
+    const mismatchedFields = fieldComparison.filter((r) =>
+      !['exact', 'whitespace_only', 'date_format_match'].includes(r.status) &&
+      !['fuzzy_full', 'fuzzy_partial'].includes(r.status)
+    );
+    const fuzzyFields = fieldComparison.filter((r) => ['fuzzy_full', 'fuzzy_partial'].includes(r.status));
+    const exactFields = fieldComparison.filter((r) => ['exact', 'whitespace_only', 'date_format_match'].includes(r.status));
+
+    let blockchainVerification = null;
+    let chainStatus = 'unchecked';
+    try {
+      blockchainVerification = await blockchainConnector.verifyDocument(fileHash);
+      if (blockchainVerification?.exists && blockchainVerification?.isVerified) chainStatus = 'on_chain';
+      else if (blockchainVerification?.exists) chainStatus = 'on_chain_unverified';
+      else chainStatus = 'not_on_current_chain';
+    } catch (e) {
+      console.warn('Blockchain verification failed during verify:', e.message);
+      chainStatus = 'unreachable';
+    }
+    const blockchainAuthentic = chainStatus === 'on_chain';
+
+    if (
+      matchedRecord.status !== 'revoked' &&
+      matchedRecord.file_hash &&
+      matchedRecord.file_hash === fileHash &&
+      chainStatus !== 'on_chain'
+    ) {
+      try {
+        const reanchored = await blockchainConnector.registerDocument({
+          documentHash: fileHash,
+          documentName: `${matchedRecord.certificate_id}.bin`,
+          xaiAnalysis: JSON.stringify({
+            flow: 'certificate_re_anchoring',
+            certificateId: matchedRecord.certificate_id,
+            reason: 'previous_chain_lost'
+          }),
+          confidenceScore: 95
+        });
+        await dbHandler.updateCertificateBlockchain(matchedRecord.certificate_id, {
+          transactionHash: reanchored.transactionHash,
+          blockNumber: reanchored.blockNumber,
+          contractAddress: reanchored.contractAddress,
+          network: 'hardhat-local',
+          anchoredAt: new Date().toISOString()
+        });
+        matchedRecord.blockchain = {
+          transactionHash: reanchored.transactionHash,
+          blockNumber: reanchored.blockNumber,
+          contractAddress: reanchored.contractAddress,
+          network: 'hardhat-local',
+          anchoredAt: new Date().toISOString()
+        };
+        chainStatus = 'on_chain';
+        console.log(`♻️  Re-anchored ${matchedRecord.certificate_id} on current chain (tx: ${reanchored.transactionHash})`);
+      } catch (e) {
+        console.warn(`Re-anchoring failed for ${matchedRecord.certificate_id}: ${e.message}`);
+      }
+    }
+
+    let verdict;
+    if (matchedRecord.status === 'revoked') verdict = 'revoked';
+    else if (matchedBy === 'file_hash') verdict = 'authentic';
+    else if (mismatchedFields.length >= 1) verdict = 'tampered';
+    else if (matchedBy === 'certificateId' && exactFields.length >= 3) verdict = 'authentic';
+    else if ((matchedBy === 'canonical_fingerprint' || matchedBy === 'extracted_serial' || matchedBy === 'hint_serial') && exactFields.length >= 3) verdict = 'authentic';
+    else if (exactFields.length + fuzzyFields.length < 2) verdict = 'tampered';
+    else verdict = 'suspicious';
+
+    const xaiAnalysis = buildXaiAnalysis({
+      verdict,
+      matchedBy,
+      fieldComparison,
+      mismatchedFields,
+      exactFields,
+      fuzzyFields,
+      forgeryCheck,
+      chainStatus,
+      matchedRecord,
+      fileHash
+    });
+
+    try { fs.unlinkSync(uploadedPath); } catch (_) {}
+
+    res.json({
+      success: true,
+      data: {
+        verdict,
+        matchedBy,
+        xaiAnalysis,
+        uploaded: {
+          fileHash,
+          ocrEngine: ocr.engine,
+          ocrConfidence: ocr.confidence,
+          extractedFields: extractedCanonical,
+          extractedFingerprint,
+          ocrText: ocr.text
+        },
+        stored: publicCertProjection(matchedRecord, req, { includeOcr: true }),
+        fieldComparison,
+        checks: {
+          blockchainAuthentic,
+          chainStatus,
+          hashMatched: matchedBy === 'file_hash',
+          fingerprintMatched: matchedBy === 'canonical_fingerprint',
+          serialMatched: matchedBy === 'extracted_serial' || matchedBy === 'hint_serial',
+          forgeryRiskLevel: forgeryCheck ? (forgeryCheck.isForged ? 'high' : 'low') : 'unknown',
+          forgeryRiskScore: forgeryCheck ? (forgeryCheck.isForged ? 80 : 10) : null
+        },
+        summary: {
+          exactCount: exactFields.length,
+          fuzzyCount: fuzzyFields.length,
+          mismatchCount: mismatchedFields.length,
+          totalCount: fieldComparison.length,
+          matchScore: Number((exactFields.length / fieldComparison.length).toFixed(2))
+        },
+        mismatches: mismatchedFields.map((m) => m.field),
+        fuzzyFields: fuzzyFields.map((f) => f.field),
+        forgery: forgeryCheck,
+        message:
+          verdict === 'authentic'
+            ? 'Certificate is authentic. All extracted fields match the on-chain record.'
+            : verdict === 'tampered'
+            ? `Certificate is TAMPERED. Mismatched fields: ${mismatchedFields.map((m) => m.field).join(', ') || 'none'}.`
+            : verdict === 'revoked'
+            ? 'This certificate has been REVOKED by the issuing organization.'
+            : 'Certificate is SUSPICIOUS. Some fields did not match exactly; manual review recommended.'
+      }
+    });
+  } catch (error) {
+    console.error('Certificate verify error:', error);
+    if (uploadedPath && fs.existsSync(uploadedPath)) {
+      try { fs.unlinkSync(uploadedPath); } catch (_) {}
+    }
+    res.status(500).json({ success: false, error: error.message });
+  } finally {
+    if (uploadedPath && fs.existsSync(uploadedPath) && uploadedPath !== originalPath) {
+      try { fs.unlinkSync(uploadedPath); } catch (_) {}
+    }
   }
 });
 

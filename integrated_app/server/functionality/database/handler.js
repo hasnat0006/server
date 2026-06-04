@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const PostgreSQLHandler = require('./postgres-handler');
 
 class DatabaseHandler {
@@ -138,6 +139,72 @@ class DatabaseHandler {
     if (!fileHash) return null;
     this.requirePostgres();
     return await this.postgresHandler.findSmallDocumentByHash(fileHash);
+  }
+
+  // ===== Organizations =====
+  async createOrganization(org) {
+    this.requirePostgres();
+    return await this.postgresHandler.createOrganization(org);
+  }
+
+  async findOrganizationByApiKey(plaintextKey) {
+    if (!plaintextKey) return null;
+    this.requirePostgres();
+    const apiKeyHash = crypto.createHash('sha256').update(plaintextKey).digest('hex');
+    return await this.postgresHandler.findOrganizationByApiKeyHash(apiKeyHash);
+  }
+
+  async findOrganizationByOrgId(orgId) {
+    if (!orgId) return null;
+    this.requirePostgres();
+    return await this.postgresHandler.findOrganizationByOrgId(orgId);
+  }
+
+  // ===== Certificates =====
+  async createCertificate(cert) {
+    this.requirePostgres();
+    return await this.postgresHandler.createCertificate(cert);
+  }
+
+  async findCertificateById(certificateId) {
+    if (!certificateId) return null;
+    this.requirePostgres();
+    return await this.postgresHandler.findCertificateById(certificateId);
+  }
+
+  async findCertificateByFileHash(fileHash) {
+    if (!fileHash) return null;
+    this.requirePostgres();
+    return await this.postgresHandler.findCertificateByFileHash(fileHash);
+  }
+
+  async findCertificateByFingerprint(fingerprint) {
+    if (!fingerprint) return null;
+    this.requirePostgres();
+    return await this.postgresHandler.findCertificateByFingerprint(fingerprint);
+  }
+
+  async findCertificateBySerial(orgId, serial) {
+    return await this.postgresHandler.findCertificateBySerial(orgId, serial);
+  }
+
+  async findCertificateBySerialAny(serial) {
+    return await this.postgresHandler.findCertificateBySerialAny(serial);
+  }
+
+  async listCertificatesByOrg(orgId, options) {
+    this.requirePostgres();
+    return await this.postgresHandler.listCertificatesByOrg(orgId, options);
+  }
+
+  async revokeCertificate(certificateId, options) {
+    this.requirePostgres();
+    return await this.postgresHandler.revokeCertificate(certificateId, options);
+  }
+
+  async updateCertificateBlockchain(certificateId, blockchain) {
+    this.requirePostgres();
+    return await this.postgresHandler.updateCertificateBlockchain(certificateId, blockchain);
   }
 
   // Chunk operations - proxy to PostgreSQL

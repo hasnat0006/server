@@ -73,7 +73,57 @@ class PostgreSQLHandler {
     await client.query('CREATE INDEX IF NOT EXISTS idx_small_documents_file_hash ON small_documents(file_hash)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_small_documents_issued_id ON small_documents(issued_document_id)');
 
-    console.log('✅ Neon schema ready (including small_documents table)');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id BIGSERIAL PRIMARY KEY,
+        org_id VARCHAR(64) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        api_key_hash VARCHAR(64) NOT NULL,
+        api_key_prefix VARCHAR(16) NOT NULL,
+        contact_email VARCHAR(255),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_organizations_api_key ON organizations(api_key_hash)');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS certificates (
+        id BIGSERIAL PRIMARY KEY,
+        certificate_id VARCHAR(64) UNIQUE NOT NULL,
+        org_id VARCHAR(64) NOT NULL,
+        issuer_name VARCHAR(255) NOT NULL,
+        recipient_name VARCHAR(255) NOT NULL,
+        course_or_title VARCHAR(500),
+        issue_date DATE NOT NULL,
+        certificate_serial VARCHAR(255),
+        additional_fields JSONB DEFAULT '{}'::jsonb,
+        canonical_fingerprint VARCHAR(64) NOT NULL,
+        file_hash VARCHAR(66) NOT NULL,
+        file_path TEXT,
+        document_data BYTEA,
+        document_mime VARCHAR(64),
+        document_filename VARCHAR(255),
+        ocr_text TEXT,
+        ocr_engine VARCHAR(50),
+        ocr_confidence NUMERIC(5,2),
+        blockchain JSONB,
+        status VARCHAR(20) DEFAULT 'active',
+        revoked_at TIMESTAMPTZ,
+        revocation_reason TEXT,
+        issued_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (org_id, certificate_serial)
+      )
+    `);
+    await client.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS document_data BYTEA');
+    await client.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS document_mime VARCHAR(64)');
+    await client.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS document_filename VARCHAR(255)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_certificates_fingerprint ON certificates(canonical_fingerprint)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_certificates_file_hash ON certificates(file_hash)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_certificates_serial ON certificates(certificate_serial)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_certificates_org ON certificates(org_id)');
+
+    console.log('✅ Neon schema ready (including small_documents, organizations, certificates tables)');
   }
 
   async createSmallDocument(record) {
@@ -131,6 +181,209 @@ class PostgreSQLHandler {
     try {
       const query = 'SELECT * FROM small_documents WHERE file_hash = $1 ORDER BY created_at DESC LIMIT 1';
       const result = await client.query(query, [fileHash]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ===== Organizations =====
+  async createOrganization(org) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        INSERT INTO organizations (org_id, name, api_key_hash, api_key_prefix, contact_email, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *
+      `;
+      const values = [
+        org.orgId,
+        org.name,
+        org.apiKeyHash,
+        org.apiKeyPrefix,
+        org.contactEmail || null,
+        org.isActive !== false
+      ];
+      const result = await client.query(query, values);
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  async findOrganizationByApiKeyHash(apiKeyHash) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM organizations WHERE api_key_hash = $1 LIMIT 1';
+      const result = await client.query(query, [apiKeyHash]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findOrganizationByOrgId(orgId) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM organizations WHERE org_id = $1 LIMIT 1';
+      const result = await client.query(query, [orgId]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ===== Certificates =====
+  async createCertificate(cert) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        INSERT INTO certificates (
+          certificate_id, org_id, issuer_name, recipient_name, course_or_title,
+          issue_date, certificate_serial,
+          additional_fields, canonical_fingerprint, file_hash,
+          file_path, document_data, document_mime, document_filename,
+          ocr_text, ocr_engine, ocr_confidence,
+          blockchain, status, issued_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        RETURNING *
+      `;
+      const values = [
+        cert.certificateId,
+        cert.orgId,
+        cert.issuerName,
+        cert.recipientName,
+        cert.courseOrTitle || null,
+        cert.issueDate,
+        cert.certificateSerial || null,
+        JSON.stringify(cert.additionalFields || {}),
+        cert.canonicalFingerprint,
+        cert.fileHash,
+        cert.filePath || null,
+        cert.documentData || null,
+        cert.documentMime || null,
+        cert.documentFilename || null,
+        cert.ocrText || null,
+        cert.ocrEngine || null,
+        cert.ocrConfidence ?? null,
+        cert.blockchain ? JSON.stringify(cert.blockchain) : null,
+        cert.status || 'active',
+        cert.issuedAt || new Date().toISOString()
+      ];
+      const result = await client.query(query, values);
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+  }
+
+  async findCertificateById(certificateId) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM certificates WHERE certificate_id = $1 LIMIT 1';
+      const result = await client.query(query, [certificateId]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findCertificateByFileHash(fileHash) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM certificates WHERE file_hash = $1 ORDER BY issued_at DESC LIMIT 1';
+      const result = await client.query(query, [fileHash]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findCertificateByFingerprint(fingerprint) {
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM certificates WHERE canonical_fingerprint = $1 ORDER BY issued_at DESC LIMIT 1';
+      const result = await client.query(query, [fingerprint]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findCertificateBySerial(orgId, serial) {
+    if (!orgId) return null;
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM certificates WHERE org_id = $1 AND certificate_serial = $2 LIMIT 1';
+      const result = await client.query(query, [orgId, serial]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findCertificateBySerialAny(serial) {
+    if (!serial) return null;
+    const client = await this.pool.connect();
+    try {
+      const query = 'SELECT * FROM certificates WHERE LOWER(certificate_serial) = LOWER($1) ORDER BY issued_at DESC LIMIT 1';
+      const result = await client.query(query, [serial]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listCertificatesByOrg(orgId, { limit = 50, offset = 0, status = null } = {}) {
+    const client = await this.pool.connect();
+    try {
+      const values = [orgId];
+      let where = 'org_id = $1';
+      if (status) {
+        values.push(status);
+        where += ` AND status = $${values.length}`;
+      }
+      values.push(limit, offset);
+      const query = `
+        SELECT * FROM certificates
+        WHERE ${where}
+        ORDER BY issued_at DESC
+        LIMIT $${values.length - 1} OFFSET $${values.length}
+      `;
+      const result = await client.query(query, values);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async revokeCertificate(certificateId, { reason = null } = {}) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        UPDATE certificates
+        SET status = 'revoked', revoked_at = NOW(), revocation_reason = $2
+        WHERE certificate_id = $1
+        RETURNING *
+      `;
+      const result = await client.query(query, [certificateId, reason]);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateCertificateBlockchain(certificateId, blockchain) {
+    const client = await this.pool.connect();
+    try {
+      const query = `
+        UPDATE certificates
+        SET blockchain = $2
+        WHERE certificate_id = $1
+        RETURNING *
+      `;
+      const result = await client.query(query, [certificateId, JSON.stringify(blockchain)]);
       return result.rows[0] || null;
     } finally {
       client.release();

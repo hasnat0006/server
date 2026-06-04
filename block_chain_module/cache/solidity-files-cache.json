@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/home/hasnat0006/Documents/server/block_chain_module/contracts/DocumentRegistry.sol": {
-      "lastModificationDate": 1775279370045,
-      "contentHash": "1c6174e90c89685d5a5ac59c8283bd2b",
+      "lastModificationDate": 1780553391263,
+      "contentHash": "0bf95e5e4551b6b277de60a6574cc888",
       "sourceName": "contracts/DocumentRegistry.sol",
       "solcConfig": {
         "version": "0.8.24",
