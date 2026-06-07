@@ -176,48 +176,43 @@ function buildMetadataFingerprint(metadata = {}) {
 function calculatePhraseOverlap(queryText, targetText, debug = false) {
   if (!queryText || !targetText) return 0;
 
-  const segmentRe = /[.!?;:,]+\s*/;
-  const normalize = (s) =>
-    s.trim()
-      .toLowerCase()
-      .replace(/^\(?\d+\)?\.?\s*/, '')
-      .replace(/\s+/g, ' ');
+  const normalizeWord = (w) => w.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  const querySegments = queryText.split(segmentRe)
-    .map(normalize)
-    .filter(s => s.length >= 10);
+  const queryWords = queryText.split(/\s+/).map(normalizeWord).filter(Boolean);
+  const targetWords = targetText.split(/\s+/).map(normalizeWord).filter(Boolean);
 
-  const targetSegments = new Set(
-    targetText.split(segmentRe)
-      .map(normalize)
-      .filter(s => s.length >= 10)
-  );
+  if (queryWords.length === 0 || targetWords.length === 0) return 0;
 
-  if (querySegments.length < 1) return 0;
+  let maxLength = 0;
+  const dp = new Array(targetWords.length + 1).fill(0);
 
-  let matched = 0;
-  const matchResults = [];
-  for (const segment of querySegments) {
-    const found = targetSegments.has(segment);
-    if (found) matched++;
-    matchResults.push({ segment, found });
+  for (let i = 1; i <= queryWords.length; i++) {
+    let prev = 0;
+    const qWord = queryWords[i - 1];
+    for (let j = 1; j <= targetWords.length; j++) {
+      const temp = dp[j];
+      if (qWord === targetWords[j - 1]) {
+        dp[j] = prev + 1;
+        if (dp[j] > maxLength) {
+          maxLength = dp[j];
+        }
+      } else {
+        dp[j] = 0;
+      }
+      prev = temp;
+    }
   }
+
+  const matchRatio = maxLength / queryWords.length;
 
   if (debug) {
-    console.log(`  ┌─ PhraseOverlap Debug ────────────────────────────`);
-    console.log(`  │ Upload segments (${querySegments.length}):`);
-    querySegments.forEach((s, i) => {
-      const mark = matchResults[i].found ? '✅' : '❌';
-      const preview = s.length > 70 ? s.substring(0, 67) + '...' : s;
-      console.log(`  │   ${mark} [${i}] "${preview}"`);
-    });
-    console.log(`  │ DB segments (${targetSegments.size}):`);
-    console.log(`  │   (set of unique normalized segments)`);
-    console.log(`  │ Matched: ${matched}/${querySegments.length} = ${(matched / querySegments.length * 100).toFixed(1)}%`);
-    console.log(`  └──────────────────────────────────────────────────`);
+    console.log(`  ┌─ Contiguous Word Match Debug ────────────────────────────`);
+    console.log(`  │ Uploaded words: ${queryWords.length}, Longest Contiguous Match: ${maxLength}`);
+    console.log(`  │ Match ratio: ${(matchRatio * 100).toFixed(1)}%`);
+    console.log(`  └──────────────────────────────────────────────────────`);
   }
 
-  return matched / querySegments.length;
+  return matchRatio;
 }
 
 function metadataTextConsistency(text, metadata = {}) {
@@ -1604,10 +1599,11 @@ app.post('/api/document/analyze-stream', upload.single('document'), async (req, 
     const seenDbChunkHashesSSE = new Set();
     const CANDIDATE_THRESHOLD_SSE = 0.4;
     const HYBRID_THRESHOLD_SSE = 0.45;
-    const EMBEDDING_FAST_PATH_THRESHOLD_SSE = 0.7;
     const TOP_K_SHORTLIST_SSE = 5;
     const matchedSectionsSSE = new Set();
     let maxSimilarity = 0;
+
+    const embeddingService = require('./functionality/services/embedding-service');
 
     try {
       const documentText = xaiResults.documentText || '';
@@ -1618,13 +1614,27 @@ app.post('/api/document/analyze-stream', upload.single('document'), async (req, 
         totalSections = currentChunks.length;
 
         // Stage 3: Running semantic analysis — emit progress per chunk
-        for (let ci = 0; ci < currentChunks.length; ci++) {
-          if (closed) return;
-          const chunk = currentChunks[ci];
-          const chunkProgress = Math.round(40 + (ci / Math.max(currentChunks.length, 1)) * 25);
-          sendEvent(3, chunkProgress);
+        // 1. Batch generate embeddings for all chunks
+        const chunkTexts = currentChunks.map(c => c.content);
+        const embeddings = await embeddingService.embedTexts(chunkTexts);
 
-          const matches = await chunkingService.findTopKSimilarChunks(chunk.content, TOP_K_SHORTLIST_SSE, CANDIDATE_THRESHOLD_SSE);
+        // 2. Query similarity in parallel, updating progress as queries resolve
+        let resolvedCount = 0;
+        const matchesPromises = currentChunks.map(async (chunk, ci) => {
+          const queryEmbedding = embeddings[ci];
+          const matches = await chunkingService.findTopKSimilarChunksWithEmbedding(
+            chunk.content,
+            queryEmbedding,
+            TOP_K_SHORTLIST_SSE,
+            CANDIDATE_THRESHOLD_SSE
+          );
+
+          resolvedCount++;
+          if (!closed) {
+            const chunkProgress = Math.round(40 + (resolvedCount / Math.max(currentChunks.length, 1)) * 25);
+            sendEvent(3, chunkProgress);
+          }
+
           let bestHybridScore = 0;
           let bestMatchData = null;
 
@@ -1632,11 +1642,19 @@ app.post('/api/document/analyze-stream', upload.single('document'), async (req, 
             const dbText = match.matched_chunk?.content || match.matched_text || '';
             const embeddingScore = match.embeddingSimilarity || 0;
             const dbChunkHash = match.matched_chunk?.chunk_hash || '';
-            let wordOverlap = 0;
-            if (embeddingScore >= EMBEDDING_FAST_PATH_THRESHOLD_SSE) {
-              wordOverlap = calculatePhraseOverlap(chunk.content, dbText);
+            
+            const wordOverlap = calculatePhraseOverlap(chunk.content, dbText);
+            
+            // Rejects false positive matches with low contiguous word overlap (e.g. < 5 words)
+            const queryWordsCount = chunk.content.split(/\s+/).filter(Boolean).length;
+            const minContiguousWords = Math.min(5, Math.max(3, Math.ceil(queryWordsCount * 0.2)));
+            const longestContiguousWords = Math.round(wordOverlap * queryWordsCount);
+
+            let hybridScore = 0;
+            if (longestContiguousWords >= minContiguousWords) {
+              hybridScore = Math.max(wordOverlap, 0.5 * embeddingScore + 0.5 * wordOverlap);
             }
-            const hybridScore = 0.5 * embeddingScore + 0.5 * wordOverlap;
+            
             if (hybridScore >= bestHybridScore) {
               bestHybridScore = hybridScore;
               bestMatchData = {
@@ -1652,11 +1670,20 @@ app.post('/api/document/analyze-stream', upload.single('document'), async (req, 
                 similarity: hybridScore,
                 embeddingSimilarity: embeddingScore,
                 coverageSimilarity: wordOverlap,
-                similarityMode: embeddingScore < EMBEDDING_FAST_PATH_THRESHOLD_SSE ? 'embedding-only-fast-path' : 'hybrid-embedding-word-overlap',
+                similarityMode: 'hybrid-embedding-word-overlap',
                 explanation: hybridScore > 0.8 ? 'Strong match.' : hybridScore > 0.6 ? 'Good match.' : 'Moderate match.'
               };
             }
           }
+
+          return { chunk, bestMatchData, bestHybridScore };
+        });
+
+        const chunkMatchesResults = await Promise.all(matchesPromises);
+
+        // Process results sequentially to populate aggregates correctly without race conditions
+        for (const res of chunkMatchesResults) {
+          const { chunk, bestMatchData, bestHybridScore } = res;
 
           if (bestMatchData && bestHybridScore >= HYBRID_THRESHOLD_SSE) {
             allMatches.push(bestMatchData);
@@ -1956,12 +1983,13 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     let similaritySum = 0;
     const CANDIDATE_THRESHOLD = 0.4;
     const HYBRID_THRESHOLD = 0.45;
-    const EMBEDDING_FAST_PATH_THRESHOLD = 0.7;
     // Top-K shortlist: only run expensive phrase-overlap on the K highest-embedding-score candidates
     const TOP_K_SHORTLIST = 5;
     let sectionBestSimilarities = [];
     // Track matched DB chunk hashes to avoid double-counting the same referenced passage
     const seenDbChunkHashes = new Set();
+
+    const embeddingService = require('./functionality/services/embedding-service');
 
     try {
       const documentText = xaiResults.documentText || '';
@@ -1978,37 +2006,51 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         console.log(`🔍 Step 2: Run hybrid scoring only on shortlisted candidates`);
         const matchedSections = new Set();
 
-        for (const chunk of currentChunks) {
-          // Step 2a: Get top-K by embedding score (pre-filter before phrase-overlap)
-          let matches = await chunkingService.findTopKSimilarChunks(chunk.content, TOP_K_SHORTLIST, CANDIDATE_THRESHOLD);
+        // 1. Batch generate embeddings for all chunks
+        const chunkTexts = currentChunks.map(c => c.content);
+        const embeddings = await embeddingService.embedTexts(chunkTexts);
 
-          console.log(`\n  ┌─ Chunk #${chunk.index + 1} ──────────────────────────────`);
-          console.log(`  │ Uploaded: "${chunk.content.substring(0, 80)}${chunk.content.length > 80 ? '...' : ''}"`);
-          console.log(`  │ Top-${TOP_K_SHORTLIST} embedding candidates retrieved: ${matches.length}`);
+        // 2. Query similarity in parallel and compute best hybrid scores
+        const matchesPromises = currentChunks.map(async (chunk, index) => {
+          const queryEmbedding = embeddings[index];
+          const matches = await chunkingService.findTopKSimilarChunksWithEmbedding(
+            chunk.content,
+            queryEmbedding,
+            TOP_K_SHORTLIST,
+            CANDIDATE_THRESHOLD
+          );
 
           let bestHybridScore = 0;
           let bestMatchData = null;
+          const chunkLogLines = [];
 
-          // Step 2b: Run phrase-overlap only on the shortlisted candidates
+          chunkLogLines.push(`\n  ┌─ Chunk #${chunk.index + 1} ──────────────────────────────`);
+          chunkLogLines.push(`  │ Uploaded: "${chunk.content.substring(0, 80)}${chunk.content.length > 80 ? '...' : ''}"`);
+          chunkLogLines.push(`  │ Top-${TOP_K_SHORTLIST} embedding candidates retrieved: ${matches.length}`);
+
           for (const match of matches) {
             const dbText = match.matched_chunk?.content || match.matched_text || '';
             const embeddingScore = match.embeddingSimilarity || 0;
             const dbChunkHash = match.matched_chunk?.chunk_hash || '';
 
-            console.log(`  │`);
-            console.log(`  │ DB match #${match.matched_chunk?.chunk_index || 0}: "${dbText.substring(0, 80)}${dbText.length > 80 ? '...' : ''}"`);
-            console.log(`  │   embeddingSimilarity = ${embeddingScore.toFixed(4)}`);
+            chunkLogLines.push(`  │`);
+            chunkLogLines.push(`  │ DB match #${match.matched_chunk?.chunk_index || 0}: "${dbText.substring(0, 80)}${dbText.length > 80 ? '...' : ''}"`);
+            chunkLogLines.push(`  │   embeddingSimilarity = ${embeddingScore.toFixed(4)}`);
 
-            let wordOverlap = 0;
-            if (embeddingScore < EMBEDDING_FAST_PATH_THRESHOLD) {
-              console.log(`  │   phraseOverlap       = SKIPPED (fast path: embedding < ${EMBEDDING_FAST_PATH_THRESHOLD})`);
-            } else {
-              wordOverlap = calculatePhraseOverlap(chunk.content, dbText, true);
-              console.log(`  │   phraseOverlap       = ${wordOverlap.toFixed(4)}`);
+            const wordOverlap = calculatePhraseOverlap(chunk.content, dbText, false);
+            chunkLogLines.push(`  │   phraseOverlap       = ${wordOverlap.toFixed(4)}`);
+
+            // Rejects false positive matches with low contiguous word overlap (e.g. < 5 words)
+            const queryWordsCount = chunk.content.split(/\s+/).filter(Boolean).length;
+            const minContiguousWords = Math.min(5, Math.max(3, Math.ceil(queryWordsCount * 0.2)));
+            const longestContiguousWords = Math.round(wordOverlap * queryWordsCount);
+
+            let hybridScore = 0;
+            if (longestContiguousWords >= minContiguousWords) {
+              hybridScore = Math.max(wordOverlap, 0.5 * embeddingScore + 0.5 * wordOverlap);
             }
 
-            const hybridScore = 0.5 * embeddingScore + 0.5 * wordOverlap;
-            console.log(`  │   hybridScore         = 0.5 × ${embeddingScore.toFixed(4)} + 0.5 × ${wordOverlap.toFixed(4)} = ${hybridScore.toFixed(4)}`);
+            chunkLogLines.push(`  │   hybridScore         = ${hybridScore.toFixed(4)} (Contiguous words: ${longestContiguousWords}/${queryWordsCount}, Required: ${minContiguousWords})`);
 
             if (hybridScore >= bestHybridScore) {
               bestHybridScore = hybridScore;
@@ -2025,9 +2067,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
                 similarity: hybridScore,
                 embeddingSimilarity: embeddingScore,
                 coverageSimilarity: wordOverlap,
-                similarityMode: embeddingScore < EMBEDDING_FAST_PATH_THRESHOLD
-                  ? 'embedding-only-fast-path'
-                  : 'hybrid-embedding-word-overlap',
+                similarityMode: 'hybrid-embedding-word-overlap',
                 explanation: hybridScore > 0.8
                   ? 'Strong match via both semantic and lexical similarity.'
                   : hybridScore > 0.6
@@ -2039,14 +2079,25 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
             }
           }
 
+          chunkLogLines.push(`  │`);
+          chunkLogLines.push(`  │ 🏆 Best hybrid score for this chunk: ${bestHybridScore.toFixed(4)} (${(bestHybridScore * 100).toFixed(1)}%)`);
+          chunkLogLines.push(`  └────────────────────────────────────────────────`);
+
+          console.log(chunkLogLines.join('\n'));
+
+          return { chunk, bestMatchData, bestHybridScore };
+        });
+
+        const chunkMatchesResults = await Promise.all(matchesPromises);
+
+        // Process results sequentially to populate aggregates correctly without race conditions
+        for (const res of chunkMatchesResults) {
+          const { chunk, bestMatchData, bestHybridScore } = res;
+
           // Push only the SINGLE best match per uploaded chunk
           if (bestMatchData && bestHybridScore >= HYBRID_THRESHOLD) {
             allMatches.push(bestMatchData);
           }
-
-          console.log(`  │`);
-          console.log(`  │ 🏆 Best hybrid score for this chunk: ${bestHybridScore.toFixed(4)} (${(bestHybridScore * 100).toFixed(1)}%)`);
-          console.log(`  └────────────────────────────────────────────────`);
 
           // Only add to similaritySum for chunks that actually matched (avoids diluting with zeros)
           if (bestHybridScore >= HYBRID_THRESHOLD) {

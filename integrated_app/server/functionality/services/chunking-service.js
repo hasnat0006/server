@@ -240,16 +240,14 @@ class ChunkingService {
       const chunks = this.splitIntoChunks(documentText);
       console.log(`✂️  Split into ${chunks.length} chunks`);
 
-      const storedChunks = [];
-      for (const chunk of chunks) {
-        const embedding = this.createSimpleEmbedding(chunk.content);
-        let embeddingVector = null;
-        try {
-          embeddingVector = await embeddingService.embedText(chunk.content);
-        } catch (error) {
-          console.warn('⚠️  Embedding generation failed:', error.message);
-        }
+      // Batch generate all embedding vectors
+      const chunkTexts = chunks.map(c => c.content);
+      const embeddingVectors = await embeddingService.embedTexts(chunkTexts);
 
+      const storedChunks = [];
+      const savePromises = chunks.map(async (chunk, index) => {
+        const embedding = this.createSimpleEmbedding(chunk.content);
+        const embeddingVector = embeddingVectors[index];
         const chunkHash = crypto.createHash('sha256').update(chunk.content).digest('hex');
 
         const chunkData = {
@@ -262,9 +260,11 @@ class ChunkingService {
           embeddingVector: Array.isArray(embeddingVector) ? embeddingVector : null
         };
 
-        const storedChunk = await this.dbHandler.createChunk(chunkData);
-        storedChunks.push(storedChunk);
-      }
+        return this.dbHandler.createChunk(chunkData);
+      });
+
+      const results = await Promise.all(savePromises);
+      storedChunks.push(...results.filter(Boolean));
 
       console.log(`✅ Stored ${storedChunks.length} chunks in database`);
       return storedChunks;
@@ -291,6 +291,66 @@ class ChunkingService {
         .slice(0, topK);
     } catch (error) {
       console.error('❌ Error in findTopKSimilarChunks:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Find top-K similar chunks using a precomputed embedding.
+   */
+  async findTopKSimilarChunksWithEmbedding(queryText, queryEmbedding, topK = 5, threshold = null) {
+    try {
+      const minTokens = (this.options && this.options.minQueryTokens) || 5;
+      if (this.isDOI(queryText) || this.tokenCount(queryText) < minTokens) {
+        return [];
+      }
+
+      if (!this.options) this.setOptions();
+      if (!queryEmbedding || !queryEmbedding.length) {
+        return [];
+      }
+
+      const embThreshold = threshold !== null ? threshold : this.options.embeddingThreshold;
+      let matches = await this.dbHandler.searchSimilarChunksByEmbedding(queryEmbedding, null, this.options.maxResults, embThreshold);
+
+      if (matches && matches.length > 0) {
+        const filtered = matches
+          .map(match => {
+            const sim = Number(match.similarity_score || 0);
+            return { ...match, embeddingSimilarity: sim };
+          })
+          .filter(m => m.embeddingSimilarity >= embThreshold);
+
+        console.log(`🔍 Found ${filtered.length} embedding-similar chunks from database`);
+        
+        const mapped = filtered.map(match => ({
+          query_text: queryText,
+          matched_text: match.chunk_text,
+          matched_chunk: {
+            content: match.chunk_text,
+            chunk_hash: match.chunk_hash,
+            chunk_index: match.chunk_index || 0,
+            chunk_text: match.chunk_text
+          },
+          similarity: match.embeddingSimilarity,
+          embeddingSimilarity: match.embeddingSimilarity,
+          similarityMode: 'embedding',
+          source_document: match.filename || match.matchedDocument,
+          document_id: match.document_id,
+          matched_document_id: match.document_id,
+          matched_metadata: match.doc_metadata,
+          matched_title: match.title || '',
+          matched_authors: match.authors || ''
+        }));
+
+        return mapped
+          .sort((a, b) => (b.embeddingSimilarity || 0) - (a.embeddingSimilarity || 0))
+          .slice(0, topK);
+      }
+
+      return [];
+    } catch (error) {
+      console.error('❌ Error in findTopKSimilarChunksWithEmbedding:', error);
       return [];
     }
   }

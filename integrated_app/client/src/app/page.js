@@ -1606,18 +1606,18 @@ export default function Home() {
                   return (
                     <div key={`rej-sec-${secKey}`} className={`rounded-xl border ${topColor.border} ${topColor.bg} p-3`}>
                       {/* Section header */}
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-sm text-slate-800">Section {secIndex}</span>
-                        <span className="rounded-md bg-white/70 border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
-                          {matches.length} match{matches.length > 1 ? "es" : ""}
-                        </span>
-                        {/* Prominent similarity percentage */}
-                        <span className={`ml-auto rounded-full px-3 py-0.5 text-sm font-bold ring-1 ${topColor.badge}`}>
-                          {(topSim * 100).toFixed(1)}% similarity
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${topColor.badge}`}>
-                          {topColor.label} overlap
-                        </span>
+                      <div className="mb-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-lg text-slate-800">Section {secIndex}</span>
+                          <span className="rounded-md bg-white/70 border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
+                            {matches.length} match{matches.length > 1 ? "es" : ""}
+                          </span>
+                        </div>
+                        <div className="mt-1">
+                          <span className={`inline-flex rounded-full px-3 py-0.5 text-sm font-bold ring-1 ${topColor.badge}`}>
+                            Section Content Match: {(topSim * 100).toFixed(1)}%
+                          </span>
+                        </div>
                       </div>
                       {/* Similarity progress bar */}
                       <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/60">
@@ -1632,7 +1632,7 @@ export default function Home() {
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
                           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                            ✦ Your Section
+                            YOUR DOCUMENT
                           </p>
                           <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                             {matches[0]?.yourText || "(No uploaded text provided)"}
@@ -1644,37 +1644,39 @@ export default function Home() {
                             return (
                               <div key={`rej-${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} bg-white/80 p-3`}>
                                 {/* Source attribution */}
-                                <div className="mb-2 rounded-md bg-slate-100/80 px-2 py-1.5">
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
-                                  <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">MATCHED SOURCE</p>
+                                <div className="mb-3 rounded-md bg-slate-100/80 px-2 py-1.5">
+                                  <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
                                     {m.matchedTitle || m.matchedDocument || "Unknown"}
                                   </p>
                                   {m.matchedAuthors ? (
                                     <p className="truncate text-[10px] text-slate-500">by {m.matchedAuthors}</p>
                                   ) : null}
                                 </div>
-                                {/* Score breakdown */}
-                                <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px]">
-                                  <span className={`font-bold text-sm ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
-                                    {((m.similarity || 0) * 100).toFixed(1)}%
-                                  </span>
-                                  <span className="text-slate-500">hybrid match</span>
-                                  <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
-                                    {severity.label}
-                                  </span>
-                                  {m.embeddingSimilarity != null ? (
-                                    <span className="ml-auto text-slate-400">
-                                      emb {((m.embeddingSimilarity || 0) * 100).toFixed(0)}%
-                                      {m.coverageSimilarity != null && m.coverageSimilarity > 0
-                                        ? ` · phrase ${((m.coverageSimilarity || 0) * 100).toFixed(0)}%`
-                                        : ""}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Database Section</p>
-                                <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">MATCHED DATABASE CONTENT</p>
+                                <p className="mb-4 max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                                   {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || "", 3) : "(No DB text)"}
                                 </p>
+                                {/* Coverage Analysis */}
+                                <div className="rounded-md border border-slate-100 bg-slate-50/80 p-2.5">
+                                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Coverage Analysis</p>
+                                  <div className="grid gap-1.5 text-xs text-slate-600">
+                                    <div className="flex justify-between">
+                                      <span>Section Content covered:</span>
+                                      <span className="font-semibold text-slate-800">{((m.similarity || 0) * 100).toFixed(1)}%</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Semantic overlap:</span>
+                                      <span className="font-semibold text-slate-800">{severity.label}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>Confidence:</span>
+                                      <span className="font-semibold text-slate-800">
+                                        {m.embeddingSimilarity != null && m.embeddingSimilarity > 0.8 ? "High" : m.embeddingSimilarity != null && m.embeddingSimilarity > 0.5 ? "Moderate" : "Low"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
@@ -2021,18 +2023,7 @@ export default function Home() {
               </div>
 
               {/* Secondary metric: weighted semantic overlap */}
-              {authorship.weightedSemanticOverlap !== undefined ? (
-                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400">Weighted Semantic Overlap</span>
-                    <span className="text-lg font-bold text-amber-600">{authorship.weightedSemanticOverlap}%</span>
-                  </div>
-                  <p className="flex-1 text-[11px] leading-relaxed text-slate-500">
-                    Dedup-corrected score: how much of your document's content semantically overlaps with the database,
-                    weighted by similarity strength. Duplicate passages counted only once.
-                  </p>
-                </div>
-              ) : null}
+              
 
               {successSimilarity && mapSectionCount > 0 ? (
                 <div className="mt-4">
@@ -2163,18 +2154,18 @@ export default function Home() {
                   return (
                     <div key={`success-sec-${secKey}`} className={`rounded-xl border ${topColor.border} ${topColor.bg} p-3`}>
                       {/* Section header */}
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-sm text-slate-800">Section {secIndex}</span>
-                        <span className="rounded-md bg-white/70 border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
-                          {matches.length} match{matches.length > 1 ? "es" : ""}
-                        </span>
-                        {/* Prominent similarity percentage */}
-                        <span className={`ml-auto rounded-full px-3 py-0.5 text-sm font-bold ring-1 ${topColor.badge}`}>
-                          {(topSim * 100).toFixed(1)}% similarity
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${topColor.badge}`}>
-                          {topColor.label} overlap
-                        </span>
+                      <div className="mb-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-lg text-slate-800">Section {secIndex}</span>
+                          <span className="rounded-md bg-white/70 border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
+                            {matches.length} match{matches.length > 1 ? "es" : ""}
+                          </span>
+                        </div>
+                        <div className="mt-1">
+                          <span className={`inline-flex rounded-full px-3 py-0.5 text-sm font-bold ring-1 ${topColor.badge}`}>
+                            Section Content Match: {(topSim * 100).toFixed(1)}%
+                          </span>
+                        </div>
                       </div>
                       {/* Similarity progress bar */}
                       <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/60">
@@ -2189,7 +2180,7 @@ export default function Home() {
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
                           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                            ✦ Your Section
+                            YOUR DOCUMENT
                           </p>
                           <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                             {matches[0]?.yourText || "(No uploaded text provided)"}
@@ -2201,37 +2192,21 @@ export default function Home() {
                             return (
                               <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} bg-white/80 p-3`}>
                                 {/* Source attribution */}
-                                <div className="mb-2 rounded-md bg-slate-100/80 px-2 py-1.5">
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
-                                  <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">MATCHED SOURCE</p>
+                                <div className="mb-3 rounded-md bg-slate-100/80 px-2 py-1.5">
+                                  <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
                                     {m.matchedTitle || m.matchedDocument || "Unknown"}
                                   </p>
                                   {m.matchedAuthors ? (
                                     <p className="truncate text-[10px] text-slate-500">by {m.matchedAuthors}</p>
                                   ) : null}
                                 </div>
-                                {/* Score breakdown */}
-                                <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px]">
-                                  <span className={`font-bold text-sm ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
-                                    {((m.similarity || 0) * 100).toFixed(1)}%
-                                  </span>
-                                  <span className="text-slate-500">hybrid match</span>
-                                  <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
-                                    {severity.label}
-                                  </span>
-                                  {m.embeddingSimilarity != null ? (
-                                    <span className="ml-auto text-slate-400">
-                                      emb {((m.embeddingSimilarity || 0) * 100).toFixed(0)}%
-                                      {m.coverageSimilarity != null && m.coverageSimilarity > 0
-                                        ? ` · phrase ${((m.coverageSimilarity || 0) * 100).toFixed(0)}%`
-                                        : ""}
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Database Section</p>
-                                <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">MATCHED DATABASE CONTENT</p>
+                                <p className="mb-4 max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                                   {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || "", 3) : "(No DB text)"}
                                 </p>
+                                {/* Coverage Analysis */}
+                                
                               </div>
                             );
                           })}
