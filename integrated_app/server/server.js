@@ -1500,8 +1500,348 @@ app.post('/api/small-documents/verify', smallDocUpload.single('document'), async
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SSE: Real-time document analysis progress stream
+// Client connects with EventSource to get stage updates as the analysis runs.
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/document/analyze-stream', upload.single('document'), async (req, res) => {
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  const startTime = Date.now();
+  let closed = false;
+
+  req.on('close', () => { closed = true; });
+
+  const STAGES = [
+    { name: 'Extracting content',         percent: 10 },
+    { name: 'Generating embeddings',       percent: 25 },
+    { name: 'Retrieving candidate chunks', percent: 40 },
+    { name: 'Running semantic analysis',   percent: 65 },
+    { name: 'Calculating authorship score',percent: 85 },
+    { name: 'Finalizing report',           percent: 97 },
+  ];
+
+  function sendEvent(stageIndex, overridePercent = null) {
+    if (closed) return;
+    const stage = STAGES[stageIndex] || STAGES[STAGES.length - 1];
+    const payload = {
+      stage: stage.name,
+      stageIndex,
+      percent: overridePercent !== null ? overridePercent : stage.percent,
+      elapsedMs: Date.now() - startTime
+    };
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    if (res.flush) res.flush();
+  }
+
+  function sendError(message) {
+    if (closed) return;
+    res.write(`data: ${JSON.stringify({ error: true, message, elapsedMs: Date.now() - startTime })}\n\n`);
+    if (res.flush) res.flush();
+    res.end();
+  }
+
+  function sendDone(resultPayload) {
+    if (closed) return;
+    res.write(`data: ${JSON.stringify({ done: true, elapsedMs: Date.now() - startTime, ...resultPayload })}\n\n`);
+    if (res.flush) res.flush();
+    res.end();
+  }
+
+  try {
+    if (!req.file) {
+      sendError('No file uploaded');
+      return;
+    }
+
+    const { originalname, filename, path: filePath, size } = req.file;
+    const { documentType, uploaderName, title } = req.body;
+
+    // Stage 0: Extracting content
+    sendEvent(0);
+    const xaiResults = await xaiAnalyzer.analyzeDocument(filePath, {
+      documentId: null,
+      documentType: documentType || 'research_paper',
+      originalName: originalname
+    });
+
+    if (closed) return;
+
+    // Stage 1: Generating embeddings (blockchain check happens here too)
+    sendEvent(1);
+    let chainVerification = null;
+    try {
+      chainVerification = await blockchainConnector.verifyDocument(xaiResults.documentHash);
+    } catch (chainCheckError) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      sendError('Blockchain verification unavailable. Upload rejected.');
+      return;
+    }
+
+    if (chainVerification?.exists) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      sendDone({ rejected: true, reason: 'duplicate_blockchain', message: 'Document already exists on blockchain.' });
+      return;
+    }
+
+    const existingDocByHash = await dbHandler.getDocumentByHash(xaiResults.documentHash);
+    if (existingDocByHash) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      sendDone({ rejected: true, reason: 'duplicate_db', message: 'Document already exists in database.' });
+      return;
+    }
+
+    // Stage 2: Retrieving candidate chunks
+    sendEvent(2);
+    let allMatches = [], similarDocuments = [], totalSections = 0, originalChunkCount = 0;
+    let matchedSectionCount = 0, similaritySum = 0;
+    let sectionBestSimilarities = [];
+    const seenDbChunkHashesSSE = new Set();
+    const CANDIDATE_THRESHOLD_SSE = 0.4;
+    const HYBRID_THRESHOLD_SSE = 0.45;
+    const EMBEDDING_FAST_PATH_THRESHOLD_SSE = 0.7;
+    const TOP_K_SHORTLIST_SSE = 5;
+    const matchedSectionsSSE = new Set();
+    let maxSimilarity = 0;
+
+    try {
+      const documentText = xaiResults.documentText || '';
+      if (documentText && documentText.length > 50 && chunkingService) {
+        const allChunks = chunkingService.splitIntoChunks(documentText);
+        originalChunkCount = allChunks.length;
+        const currentChunks = allChunks.filter(c => c.content && c.content.length >= 80);
+        totalSections = currentChunks.length;
+
+        // Stage 3: Running semantic analysis — emit progress per chunk
+        for (let ci = 0; ci < currentChunks.length; ci++) {
+          if (closed) return;
+          const chunk = currentChunks[ci];
+          const chunkProgress = Math.round(40 + (ci / Math.max(currentChunks.length, 1)) * 25);
+          sendEvent(3, chunkProgress);
+
+          const matches = await chunkingService.findTopKSimilarChunks(chunk.content, TOP_K_SHORTLIST_SSE, CANDIDATE_THRESHOLD_SSE);
+          let bestHybridScore = 0;
+          let bestMatchData = null;
+
+          for (const match of matches) {
+            const dbText = match.matched_chunk?.content || match.matched_text || '';
+            const embeddingScore = match.embeddingSimilarity || 0;
+            const dbChunkHash = match.matched_chunk?.chunk_hash || '';
+            let wordOverlap = 0;
+            if (embeddingScore >= EMBEDDING_FAST_PATH_THRESHOLD_SSE) {
+              wordOverlap = calculatePhraseOverlap(chunk.content, dbText);
+            }
+            const hybridScore = 0.5 * embeddingScore + 0.5 * wordOverlap;
+            if (hybridScore >= bestHybridScore) {
+              bestHybridScore = hybridScore;
+              bestMatchData = {
+                yourSection: chunk.index + 1,
+                yourText: chunk.content,
+                matchedSection: match.matched_chunk?.chunk_index || 0,
+                matchedText: dbText,
+                matchedDocument: match.source_document,
+                matchedDocumentId: match.document_id,
+                matchedDbChunkHash: dbChunkHash,
+                matchedTitle: match.matched_title || '',
+                matchedAuthors: match.matched_authors || '',
+                similarity: hybridScore,
+                embeddingSimilarity: embeddingScore,
+                coverageSimilarity: wordOverlap,
+                similarityMode: embeddingScore < EMBEDDING_FAST_PATH_THRESHOLD_SSE ? 'embedding-only-fast-path' : 'hybrid-embedding-word-overlap',
+                explanation: hybridScore > 0.8 ? 'Strong match.' : hybridScore > 0.6 ? 'Good match.' : 'Moderate match.'
+              };
+            }
+          }
+
+          if (bestMatchData && bestHybridScore >= HYBRID_THRESHOLD_SSE) {
+            allMatches.push(bestMatchData);
+            matchedSectionsSSE.add(chunk.index);
+            const dbHash = bestMatchData.matchedDbChunkHash || '';
+            if (!dbHash || !seenDbChunkHashesSSE.has(dbHash)) {
+              if (dbHash) seenDbChunkHashesSSE.add(dbHash);
+              similaritySum += bestHybridScore;
+            }
+          }
+          sectionBestSimilarities.push({
+            section: chunk.index + 1,
+            bestSimilarityRaw: Number(bestHybridScore.toFixed(4)),
+            bestSimilarityPct: Number((bestHybridScore * 100).toFixed(2)),
+            isMatched: bestHybridScore >= HYBRID_THRESHOLD_SSE
+          });
+        }
+
+        matchedSectionCount = matchedSectionsSSE.size;
+
+        const docGroups = {};
+        allMatches.forEach(match => {
+          const docId = match.matchedDocumentId;
+          if (!docGroups[docId]) docGroups[docId] = { document_id: docId, document_name: match.matchedDocument, matches: [], total_similarity: 0, section_count: 0 };
+          docGroups[docId].matches.push(match);
+          docGroups[docId].total_similarity += match.similarity;
+          docGroups[docId].section_count++;
+        });
+
+        if (Object.keys(docGroups).length > 0) {
+          similarDocuments = Object.values(docGroups).map(doc => ({
+            ...doc,
+            average_similarity: doc.section_count > 0 ? doc.total_similarity / doc.section_count : 0,
+            original_name: doc.document_name
+          })).sort((a, b) => b.average_similarity - a.average_similarity);
+          maxSimilarity = similarDocuments[0]?.average_similarity || 0;
+          allMatches = allMatches.sort((a, b) => b.similarity - a.similarity);
+        }
+      }
+    } catch (chunkError) {
+      console.warn('⚠️  SSE: chunk comparison error:', chunkError.message);
+    }
+
+    // Stage 4: Calculating authorship score
+    sendEvent(4);
+    const SIMILARITY_THRESHOLD_SSE = 40;
+    const matchedPortionPercentage = totalSections > 0
+      ? Number(((matchedSectionCount / totalSections) * 100).toFixed(2))
+      : 0;
+    const weightedSemanticOverlap = totalSections > 0
+      ? Number(((similaritySum / totalSections) * 100).toFixed(2))
+      : 0;
+
+    const originalSections = totalSections - matchedSectionCount;
+    const originalPercentage = totalSections > 0 ? Number(((originalSections / totalSections) * 100).toFixed(2)) : 100;
+    const matchedPercentage = Number((100 - originalPercentage).toFixed(2));
+    let authorshipLevel = 'High';
+    if (originalPercentage < 60) authorshipLevel = 'Low';
+    else if (originalPercentage < 80) authorshipLevel = 'Moderate';
+
+    const contributors = similarDocuments.map(doc => ({
+      documentId: doc.document_id,
+      documentName: doc.document_name || doc.original_name || 'Unknown',
+      authors: (doc.matches && doc.matches[0] && doc.matches[0].matchedAuthors) || '',
+      similarSections: doc.section_count,
+      averageSimilarity: (doc.average_similarity * 100).toFixed(1) + '%',
+      contributionPercentage: totalSections > 0 ? Number(((doc.section_count / totalSections) * 100).toFixed(2)) : 0
+    }));
+
+    const acceptedPerSectionMatches = {};
+    for (const m of allMatches) {
+      const sec = m.yourSection;
+      if (sec == null) continue;
+      if (!acceptedPerSectionMatches[sec]) acceptedPerSectionMatches[sec] = [];
+      acceptedPerSectionMatches[sec].push({
+        yourText: m.yourText,
+        matchedText: m.matchedText,
+        matchedDocument: m.matchedDocument,
+        matchedDocumentId: m.matchedDocumentId,
+        matchedTitle: m.matchedTitle || '',
+        matchedAuthors: m.matchedAuthors || '',
+        similarity: m.similarity,
+        embeddingSimilarity: m.embeddingSimilarity,
+        coverageSimilarity: m.coverageSimilarity
+      });
+    }
+
+    xaiResults.plagiarismCheck = {
+      isPlagiarized: matchedPortionPercentage > SIMILARITY_THRESHOLD_SSE,
+      similarityScore: matchedPortionPercentage,
+      matchedPortionPercentage,
+      weightedSemanticOverlap,
+      threshold: SIMILARITY_THRESHOLD_SSE,
+      matchedDocuments: similarDocuments,
+      similarSections: allMatches.length,
+      comparisonMethod: 'hybrid-embedding-word-overlap-top-k'
+    };
+    xaiResults.embeddingMatchResults = {
+      totalMatches: allMatches.length,
+      documents: similarDocuments.map(doc => ({ documentId: doc.document_id, documentName: doc.document_name, averageSimilarity: (doc.average_similarity * 100).toFixed(1) + '%', similarSections: doc.section_count })),
+      topMatches: allMatches.slice(0, 10),
+      totalSections,
+      matchedSections: matchedSectionCount,
+      matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
+      sectionBestSimilarities,
+      perSectionMatches: acceptedPerSectionMatches
+    };
+    xaiResults.status = matchedPortionPercentage <= SIMILARITY_THRESHOLD_SSE ? 'verified' : 'rejected';
+    xaiResults.confidenceScore = Math.max(0, Math.round(100 - (matchedPortionPercentage * 0.8)));
+
+    const authorship = {
+      totalSections, originalSections, matchedSections: matchedSectionCount,
+      originalPercentage, matchedPercentage, weightedSemanticOverlap, authorshipLevel, contributors,
+      note: 'matchedPercentage = sections above similarity threshold / total sections. weightedSemanticOverlap = dedup-corrected weighted similarity sum / total sections.'
+    };
+
+    // Stage 5: Finalizing report
+    sendEvent(5);
+
+    // Save to database
+    const documentRecord = await dbHandler.createDocument({
+      originalName: originalname, fileName: filename, filePath, fileSize: size,
+      documentType: documentType || 'research_paper',
+      uploaderName: uploaderName || 'Anonymous',
+      title: title || '',
+      status: xaiResults.status,
+      documentHash: xaiResults.documentHash
+    });
+
+    // Save chunks
+    if (xaiResults.documentText && xaiResults.documentText.length > 50 && chunkingService && dbHandler.usePostgres) {
+      try {
+        await chunkingService.processDocument(documentRecord.id, xaiResults.documentText, {
+          original_name: originalname, document_type: documentType, file_hash: xaiResults.documentHash
+        });
+      } catch (err) { console.error('❌ SSE: chunk save error:', err.message); }
+    }
+
+    // Blockchain
+    let blockchainData = null;
+    if (xaiResults.status === 'verified') {
+      try {
+        blockchainData = await blockchainConnector.registerDocument({
+          documentName: originalname, documentHash: xaiResults.documentHash,
+          xaiAnalysis: JSON.stringify(xaiResults), confidenceScore: xaiResults.confidenceScore
+        });
+      } catch (bcErr) { console.error('⚠️  SSE: blockchain error:', bcErr.message); }
+    }
+
+    await dbHandler.updateDocument(documentRecord.id, {
+      status: xaiResults.status, xaiResults, blockchainData, documentHash: xaiResults.documentHash
+    });
+
+    const similarityData = {
+      totalSections, originalChunkCount, matchedSections: matchedSectionCount,
+      matchedPortionPercentage: matchedPortionPercentage.toFixed(1),
+      sectionBestSimilarities,
+      perSectionMatches: acceptedPerSectionMatches,
+      matchedDocuments: similarDocuments.map(doc => ({
+        documentId: doc.document_id, documentName: doc.document_name || doc.original_name || 'Unknown',
+        similarity: (doc.average_similarity * 100).toFixed(1) + '%', matchingChunks: doc.section_count
+      })),
+      topMatches: allMatches.slice(0, 10)
+    };
+
+    sendDone({
+      success: true,
+      data: {
+        documentId: documentRecord.id, originalName: originalname, blockchain: blockchainData,
+        xaiAnalysis: xaiResults, similarity: similarityData, authorship,
+        message: xaiResults.status === 'verified'
+          ? 'Document verified and registered on blockchain!'
+          : 'Document analysis complete but not verified.'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ SSE stream error:', error);
+    sendError(error.message || 'Analysis failed');
+  }
+});
+
 // Upload and analyze document (Main endpoint combining blockchain + XAI)
 app.post('/api/document/upload', upload.single('document'), async (req, res) => {
+
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: 'No file uploaded' });
@@ -1617,7 +1957,11 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
     const CANDIDATE_THRESHOLD = 0.4;
     const HYBRID_THRESHOLD = 0.45;
     const EMBEDDING_FAST_PATH_THRESHOLD = 0.7;
+    // Top-K shortlist: only run expensive phrase-overlap on the K highest-embedding-score candidates
+    const TOP_K_SHORTLIST = 5;
     let sectionBestSimilarities = [];
+    // Track matched DB chunk hashes to avoid double-counting the same referenced passage
+    const seenDbChunkHashes = new Set();
 
     try {
       const documentText = xaiResults.documentText || '';
@@ -1630,22 +1974,26 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
         totalSections = currentChunks.length;
         console.log(`✂️  Split document into ${originalChunkCount} chunks (${totalSections} analyzed after length filter)`);
 
-        console.log(`🔍 Finding candidates via embedding (threshold ${CANDIDATE_THRESHOLD}) + scoring via hybrid (embedding + word-overlap)`);
+        console.log(`🔍 Step 1: Retrieve top-${TOP_K_SHORTLIST} embedding candidates per chunk (threshold ${CANDIDATE_THRESHOLD})`);
+        console.log(`🔍 Step 2: Run hybrid scoring only on shortlisted candidates`);
         const matchedSections = new Set();
 
         for (const chunk of currentChunks) {
-          let matches = await chunkingService.findSimilarChunks(chunk.content, null, CANDIDATE_THRESHOLD);
+          // Step 2a: Get top-K by embedding score (pre-filter before phrase-overlap)
+          let matches = await chunkingService.findTopKSimilarChunks(chunk.content, TOP_K_SHORTLIST, CANDIDATE_THRESHOLD);
 
           console.log(`\n  ┌─ Chunk #${chunk.index + 1} ──────────────────────────────`);
           console.log(`  │ Uploaded: "${chunk.content.substring(0, 80)}${chunk.content.length > 80 ? '...' : ''}"`);
-          console.log(`  │ Found ${matches.length} embedding candidate(s)`);
+          console.log(`  │ Top-${TOP_K_SHORTLIST} embedding candidates retrieved: ${matches.length}`);
 
           let bestHybridScore = 0;
           let bestMatchData = null;
 
+          // Step 2b: Run phrase-overlap only on the shortlisted candidates
           for (const match of matches) {
             const dbText = match.matched_chunk?.content || match.matched_text || '';
             const embeddingScore = match.embeddingSimilarity || 0;
+            const dbChunkHash = match.matched_chunk?.chunk_hash || '';
 
             console.log(`  │`);
             console.log(`  │ DB match #${match.matched_chunk?.chunk_index || 0}: "${dbText.substring(0, 80)}${dbText.length > 80 ? '...' : ''}"`);
@@ -1671,6 +2019,7 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
                 matchedText: dbText,
                 matchedDocument: match.source_document,
                 matchedDocumentId: match.document_id,
+                matchedDbChunkHash: dbChunkHash,
                 matchedTitle: match.matched_title || match.matched_metadata?.title || '',
                 matchedAuthors: match.matched_authors || match.matched_metadata?.uploader_name || '',
                 similarity: hybridScore,
@@ -1699,25 +2048,34 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
           console.log(`  │ 🏆 Best hybrid score for this chunk: ${bestHybridScore.toFixed(4)} (${(bestHybridScore * 100).toFixed(1)}%)`);
           console.log(`  └────────────────────────────────────────────────`);
 
-          similaritySum += bestHybridScore;
+          // Only add to similaritySum for chunks that actually matched (avoids diluting with zeros)
           if (bestHybridScore >= HYBRID_THRESHOLD) {
             matchedSections.add(chunk.index);
+            // Dedup: only count unique DB chunk hashes toward weighted sum
+            const dbHash = bestMatchData?.matchedDbChunkHash || '';
+            if (!dbHash || !seenDbChunkHashes.has(dbHash)) {
+              if (dbHash) seenDbChunkHashes.add(dbHash);
+              similaritySum += bestHybridScore;
+            } else {
+              console.log(`  ⚡ Dedup: DB chunk hash already counted, skipping weighted sum contribution`);
+            }
           }
 
           sectionBestSimilarities.push({
             section: chunk.index + 1,
             bestSimilarityRaw: Number(bestHybridScore.toFixed(4)),
             bestSimilarityPct: Number((bestHybridScore * 100).toFixed(2)),
+            isMatched: bestHybridScore >= HYBRID_THRESHOLD,
           });
         }
 
         console.log(`\n${'═'.repeat(60)}`);
         console.log(`📊 FINAL SIMILARITY CALCULATION:`);
         console.log(`   Total sections (chunks): ${totalSections}`);
-        console.log(`   Similarity sum (bestHybridScore per chunk): ${similaritySum.toFixed(4)}`);
-        console.log(`   Average hybrid similarity: ${similaritySum.toFixed(4)} / ${totalSections} = ${(similaritySum / totalSections).toFixed(4)}`);
-        console.log(`   Percentage: ${(similaritySum / totalSections * 100).toFixed(1)}%`);
-        console.log(`   Sections above threshold (${HYBRID_THRESHOLD}): ${matchedSections.size} / ${totalSections}`);
+        console.log(`   Matched sections (score >= ${HYBRID_THRESHOLD}): ${matchedSections.size}`);
+        console.log(`   Weighted similarity sum (dedup): ${similaritySum.toFixed(4)}`);
+        console.log(`   Weighted semantic overlap: ${similaritySum.toFixed(4)} / ${totalSections} = ${(similaritySum / totalSections).toFixed(4)}`);
+        console.log(`   Section-based match coverage: ${matchedSections.size} / ${totalSections} = ${(matchedSections.size / Math.max(totalSections, 1) * 100).toFixed(1)}%`);
         console.log(`${'═'.repeat(60)}\n`);
 
         matchedSectionCount = matchedSections.size;
@@ -1764,10 +2122,16 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       console.log('⚠️  Database comparison unavailable:', chunkError.message);
     }
 
-    // Step 2.5: CHECK MATCH THRESHOLD (based on average embedding similarity)
+    // Step 2.5: CHECK MATCH THRESHOLD
+    // matchedPortionPercentage = fraction of uploaded sections that exceeded HYBRID_THRESHOLD
+    // This is a realistic "how much of your document matched" metric.
+    // weightedSemanticOverlap = dedup-corrected weighted sum / total sections (richer signal)
     const SIMILARITY_THRESHOLD = 40;
     const similarityPercentage = maxSimilarity * 100;
     const matchedPortionPercentage = totalSections > 0
+      ? Number(((matchedSectionCount / totalSections) * 100).toFixed(2))
+      : 0;
+    const weightedSemanticOverlap = totalSections > 0
       ? Number(((similaritySum / totalSections) * 100).toFixed(2))
       : 0;
 
@@ -1841,12 +2205,13 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       return res.status(400).json({
         success: false,
         error: 'Upload rejected - High similarity detected',
-        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% hybrid similarity (embedding + word overlap) with existing stored documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
+        message: `Upload failed: ${matchedPortionPercentage.toFixed(1)}% of document sections semantically match existing stored documents. Threshold is ${SIMILARITY_THRESHOLD}%.`,
         similarity: {
           totalSections,
           originalChunkCount,
           matchedSections: matchedSectionCount,
           matchedPortionPercentage: Number(matchedPortionPercentage.toFixed(2)),
+          weightedSemanticOverlap: Number(weightedSemanticOverlap.toFixed(2)),
           sectionBestSimilarities,
           thresholdCoverage,
           perSectionMatches,
@@ -1864,8 +2229,10 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
           matchedSections: matchedSectionCount,
           originalPercentage,
           matchedPercentage,
+          weightedSemanticOverlap: Number(weightedSemanticOverlap.toFixed(2)),
           authorshipLevel: rejectionAuthorshipLevel,
-          contributors: rejectionContributors
+          contributors: rejectionContributors,
+          note: 'matchedPercentage = sections above similarity threshold / total sections. weightedSemanticOverlap = dedup-corrected weighted similarity sum / total sections.'
         }
       });
     }
@@ -1952,8 +2319,10 @@ app.post('/api/document/upload', upload.single('document'), async (req, res) => 
       matchedSections: matchedSectionCount,
       originalPercentage,
       matchedPercentage,
+      weightedSemanticOverlap: Number(weightedSemanticOverlap.toFixed(2)),
       authorshipLevel,
-      contributors
+      contributors,
+      note: 'matchedPercentage = sections above similarity threshold / total sections. weightedSemanticOverlap = dedup-corrected weighted similarity sum / total sections.'
     };
     
     xaiResults.status = matchedPortionPercentage <= SIMILARITY_THRESHOLD ? 'verified' : 'rejected';

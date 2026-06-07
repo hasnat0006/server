@@ -1,0 +1,60 @@
+\chapter{INTRODUCTION}\label{ch:intro}
+Document verification refers to the process of validating the authenticity, integrity, and provenance of credentials, ensuring that digital or physical records have not been altered or fraudulently generated.
+\section{Research Background}
+\justifying{
+    
+    In today’s world, fake academic and professional credentials pose a widespread socioeconomic problem. Many resumes and certificates suffer from verification gaps, with global estimations suggesting that upwards of 13\% of credentials remain unverified in certain domains, and an alarming 30\% of surveyed resumes contain falsely claimed degrees \cite{chaudhari2023blockchain}. The recent proliferation of advanced generative AI has exacerbated this crisis, making it trivial for malicious actors to synthesize documents that look perfectly authentic to the human eye.
+
+Traditional verification systems rely on centralized databases managed by individual institutions. These architectures are highly vulnerable to localized cyberattacks, database manipulation by malicious insiders, and systemic downtime \cite{onoshioze2025academic}. Blockchain technology has emerged as a decentralized alternative capable of offering secure, immutable, and auditable record-keeping \cite{mohsin2025blockchain}. However, when blockchain engines are combined with automated detection systems, they operate as an opaque "black box." Modern verification frameworks must not only secure record registries but also explain why an AI module flags a document as counterfeit, particularly when identifying AI-generated text or structural anomalies \cite{gongane2024survey}.
+
+Developing a comprehensive model that bridges cryptographic data provenance with Explainable Artificial Intelligence (XAI) is essential to establish decision-level trust for employers, academic institutions, and regulatory bodies \cite{mohsin2025blockchain}.
+}
+
+
+\section{Problem Statement}     
+    The way we verify documents today has some big problems. There are three issues with the current methods.
+    \vspace{-5mm}
+    \begin{enumerate}
+        \item \textbf{Centralization and Overhead:} Storing academic and professional records in siloed databases results in steep administrative maintenance fees for institutions. Furthermore, manual verification pipelines are slow, prone to human error, and completely lack structural protection against retrospective data tampering \textbf{\cite{andrade2026decentralized}}.
+
+        \item \textbf{Generative Document Forgery:} The rapid evolution of machine learning and large language models (LLMs) has enabled the creation of high-fidelity fake documents. These digital assets accurately mimic legitimate institutional formats, rendering traditional pattern-matching and human inspection obsolete.
+
+        \item \textbf{The Opacity of Detection Systems (The "Black Box" Problem):} Existing automated classification systems do not disclose the logical rationale behind their decisions. When an AI model flags a credential as plagiarized or forged, it provides no structural or textual breakdown to support its claim, making it impossible for human auditors to independently validate and trust the output \textbf{\cite{mansoor2025explainable}}.
+    \end{enumerate}
+
+
+
+\section{Thesis Objectives}
+    The main objectives of this thesis are:
+    \vspace{-5mm}
+    \begin{enumerate}
+        \item To develop a secure and decentralized document verification system using the Ethereum blockchain so that records remain tamper-proof and trustworthy.
+        \item To build an explainable AI-based module that can accurately detect fake certificates, forged content, and plagiarism.
+        \item To provide clear and understandable explanations behind verification results so that institutions and employers can easily trust and validate the system.
+    \end{enumerate}
+
+\section{Methodological Overview}
+\justifying{
+The proposed Integrated Document Verification Platform is built on a modular hybrid architecture comprising four specialized layers:
+
+\begin{enumerate}
+  \item \textbf{Web Orchestrator Layer:} An Express.js backend server that handles request routing, file upload management across over fifteen document formats, and orchestrates the sequential processing pipeline.
+
+  \item \textbf{Explainable AI (XAI) Analysis Layer:} A suite of custom heuristic analyzers that examines each document through three diagnostic tests—plagiarism and similarity auditing, AI-generated content detection, and certificate forgery isolation—producing human-readable explanations for every verdict.
+
+  \item \textbf{Blockchain Trust Layer:} A Solidity smart contract (\texttt{DocumentRegistry}) deployed on an Ethereum-compatible network that immutably anchors document hashes, XAI confidence scores, and verification status through a three-step transaction sequence.
+
+  \item \textbf{Data and Storage Tier:} Neon PostgreSQL with the \texttt{pgvector} extension, storing document metadata, 384-dimensional sentence-level embeddings for semantic similarity search, certificate records, and organization profiles.
+\end{enumerate}
+
+The system supports two distinct verification workflows: one for large-format documents (research papers and articles) that undergo plagiarism detection, AI content analysis, and blockchain anchoring; and another for small-format credentials (certificates and diplomas) that employ OCR-based field extraction, multi-strategy record matching, and field-level comparison to produce verdicts such as Authentic, Tampered, or Unknown.
+}
+
+
+\section{Thesis Scope}
+    The scope of this thesis is limited to the verification of digital text-based documents and academic certificates. The research mainly focuses on integrating blockchain technology with explainable AI (XAI) models to analyze the content and overall structure of documents. The proposed system is evaluated based on detection accuracy, blockchain transaction performance, and the clarity of the explainability reports generated for users. This research does not cover the security of physical documents, such as paper-based watermarks or seals, and it is not related to cryptocurrency trading or financial applications of blockchain.
+
+\section{Organization of the Chapters}
+\justifying{
+The remainder of this thesis is organized as follows. Chapter~2 reviews the existing literature on blockchain-based verification, explainable AI, and document authentication systems. Chapter~3 presents the proposed system methodology, describing the four-layer architecture, the document processing pipeline, the XAI analysis techniques, and the blockchain anchoring process. Chapter~4 details the design and implementation of each component, including the database schema, smart contract logic, and REST API design. Chapter~5 presents the experimental results and discusses the system's performance across detection accuracy, blockchain transaction efficiency, and explainability quality. Finally, Chapter~6 concludes the thesis with a summary of findings and directions for future work.
+}

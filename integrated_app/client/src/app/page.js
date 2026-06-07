@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const DEFAULT_API_BASE = "http://localhost:5000";
 const ANALYSIS_STEPS = [
-  "Uploading document",
-  "Reading document text",
-  "Checking for duplicate content",
-  "Running AI verification",
-  "Recording on blockchain",
-  "Finalizing result",
+  "Extracting content",
+  "Generating embeddings",
+  "Retrieving candidate chunks",
+  "Running semantic analysis",
+  "Calculating authorship score",
+  "Finalizing report",
 ];
 
 function escapeRegExp(value) {
@@ -484,6 +484,10 @@ export default function Home() {
   const [failureDetails, setFailureDetails] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [totalTimeSeconds, setTotalTimeSeconds] = useState(null);
+  const analysisStartRef = useRef(null);
+  const timerRef = useRef(null);
 
   // Certificate verification state
   const [certVerifyFile, setCertVerifyFile] = useState(null);
@@ -545,29 +549,23 @@ export default function Home() {
     return (process.env.NEXT_PUBLIC_SERVER_URL || DEFAULT_API_BASE).replace(/\/$/, "");
   }, []);
 
+  // Live elapsed timer — ticks every second while analysis is running
   useEffect(() => {
-    if (!isSubmitting) {
-      return;
+    if (isSubmitting) {
+      analysisStartRef.current = Date.now();
+      setElapsedSeconds(0);
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - analysisStartRef.current) / 1000));
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
-
-    setActiveStep(0);
-    setProgressPercent(8);
-
-    const intervalId = setInterval(() => {
-      setActiveStep((previousStep) => {
-        if (previousStep >= ANALYSIS_STEPS.length - 1) {
-          return previousStep;
-        }
-        return previousStep + 1;
-      });
-
-      setProgressPercent((previousProgress) => {
-        const next = previousProgress + 14;
-        return next > 92 ? 92 : next;
-      });
-    }, 1100);
-
-    return () => clearInterval(intervalId);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [isSubmitting]);
 
   useEffect(() => {
@@ -584,6 +582,8 @@ export default function Home() {
     setFailureDetails(null);
     setActiveStep(0);
     setProgressPercent(0);
+    setElapsedSeconds(0);
+    setTotalTimeSeconds(null);
   }
 
   function resetCertVerifyState() {
@@ -765,17 +765,16 @@ export default function Home() {
     setFailureDetails(null);
     setActiveStep(0);
     setProgressPercent(0);
+    setTotalTimeSeconds(null);
 
     if (!file) {
       setError("Please choose a file before uploading.");
       return;
     }
-
     if (!title.trim()) {
       setError("Please enter a document title.");
       return;
     }
-
     if (!uploaderName.trim()) {
       setError("Please enter the author(s) name.");
       return;
@@ -787,38 +786,77 @@ export default function Home() {
     formData.append("title", title || "");
 
     setIsSubmitting(true);
+    const uploadStart = Date.now();
+
     try {
-      const response = await fetch(`${apiBase}/api/document/upload`, {
+      const response = await fetch(`${apiBase}/api/document/analyze-stream`, {
         method: "POST",
         body: formData,
       });
 
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-
-      if (!response.ok || !payload.success) {
-        setFailureDetails(payload);
+      if (!response.ok || !response.body) {
+        // Fallback: try to parse error as JSON
+        let payload = null;
+        try { payload = await response.json(); } catch { payload = null; }
         const reason = payload?.message || payload?.error || `Upload failed (HTTP ${response.status})`;
-        const duplicateName = payload?.duplicateDocument?.name;
-        const duplicateTime = payload?.duplicateDocument?.uploadedAt;
-
-        let detailedReason = reason;
-        if (duplicateName || duplicateTime) {
-          detailedReason += "\n\nExisting record:";
-          if (duplicateName) detailedReason += `\n- Name: ${duplicateName}`;
-          if (duplicateTime) detailedReason += `\n- Uploaded: ${new Date(duplicateTime).toLocaleString()}`;
-        }
-
-        throw new Error(detailedReason);
+        throw new Error(reason);
       }
 
-      setResult(payload);
-      setProgressPercent(100);
-      setActiveStep(ANALYSIS_STEPS.length - 1);
+      // Consume SSE stream line-by-line
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on double-newline (SSE event boundary)
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          const jsonStr = line.slice(5).trim();
+          let evt;
+          try { evt = JSON.parse(jsonStr); } catch { continue; }
+
+          if (evt.error) {
+            throw new Error(evt.message || "Analysis failed");
+          }
+
+          if (evt.done) {
+            const totalSec = Math.round((Date.now() - uploadStart) / 1000);
+            setTotalTimeSeconds(totalSec);
+            setProgressPercent(100);
+            setActiveStep(ANALYSIS_STEPS.length - 1);
+
+            if (evt.rejected) {
+              // Build a failureDetails-compatible object from the SSE done event
+              const syntheticPayload = {
+                success: false,
+                message: evt.message || "Upload rejected.",
+                error: evt.reason || "rejected",
+                authorship: evt.data?.authorship || null,
+                similarity: evt.data?.similarity || null,
+              };
+              setFailureDetails(syntheticPayload);
+              setError(evt.message || "Upload rejected.");
+            } else if (evt.success) {
+              setResult(evt);
+            }
+            break;
+          }
+
+          // Progress event
+          if (evt.stageIndex !== undefined) {
+            setActiveStep(evt.stageIndex);
+            setProgressPercent(Math.min(evt.percent ?? 0, 97));
+          }
+        }
+      }
     } catch (uploadError) {
       setProgressPercent(100);
       setError(uploadError.message || "Upload failed");
@@ -867,6 +905,12 @@ export default function Home() {
     if (sim >= 0.8) return { label: "High", border: "border-red-300", bg: "bg-red-50", badge: "bg-red-100 text-red-700 ring-red-300" };
     if (sim >= 0.5) return { label: "Medium", border: "border-amber-300", bg: "bg-amber-50", badge: "bg-amber-100 text-amber-700 ring-amber-300" };
     return { label: "Low", border: "border-yellow-200", bg: "bg-yellow-50", badge: "bg-yellow-100 text-yellow-700 ring-yellow-200" };
+  }
+
+  function formatElapsed(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
   return (
@@ -1314,18 +1358,24 @@ export default function Home() {
         <section className="rounded-2xl border border-sky-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-slate-900">Analysis in progress</h2>
-            <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-              {progressPercent}% complete
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                {progressPercent}% complete
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-semibold text-slate-600">
+                ⏱ {formatElapsed(elapsedSeconds)}
+              </span>
+            </div>
           </div>
 
           <p className="mt-2 text-sm text-slate-600">
-            Please wait. We are processing your document and checking it against existing records.
+            <span className="font-medium text-sky-700">{ANALYSIS_STEPS[activeStep]}</span>
+            {" "}— Please wait while we verify your document against existing records.
           </p>
 
-          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-sky-500 to-teal-500 transition-all duration-700"
+              className="h-full rounded-full bg-gradient-to-r from-sky-500 via-teal-500 to-emerald-500 transition-all duration-700"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -1338,31 +1388,39 @@ export default function Home() {
               return (
                 <li
                   key={step}
-                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all ${
                     isCompleted
                       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                       : isCurrent
-                        ? "border-sky-200 bg-sky-50 text-sky-800"
-                        : "border-slate-200 bg-slate-50 text-slate-500"
+                        ? "border-sky-200 bg-sky-50 text-sky-800 shadow-sm"
+                        : "border-slate-200 bg-slate-50 text-slate-400"
                   }`}
                 >
-                  <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold ${
+                  <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
                     isCompleted
                       ? "bg-emerald-600 text-white"
                       : isCurrent
                         ? "bg-sky-600 text-white"
-                        : "bg-slate-300 text-slate-700"
+                        : "bg-slate-300 text-slate-600"
                   }`}>
                     {isCompleted ? "✓" : index + 1}
                   </span>
-                  <span className={isCurrent ? "font-medium" : ""}>{step}</span>
-                  {isCurrent ? <span className="ml-auto text-xs animate-pulse">Working...</span> : null}
+                  <span className={isCurrent ? "font-semibold" : ""}>{step}</span>
+                  {isCurrent ? (
+                    <span className="ml-auto flex items-center gap-1.5 text-xs text-sky-600">
+                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
+                      Running…
+                    </span>
+                  ) : isCompleted ? (
+                    <span className="ml-auto text-[10px] font-medium text-emerald-600">Done</span>
+                  ) : null}
                 </li>
               );
             })}
           </ol>
         </section>
       ) : null}
+
 
       {failureDetails ? (
         <section className="rounded-2xl border border-rose-300 bg-gradient-to-br from-white via-rose-50/40 to-white p-5 shadow-sm sm:p-6">
@@ -1546,22 +1604,35 @@ export default function Home() {
                   const topSim = matches.reduce((max, m) => Math.max(max, m.similarity || 0), 0);
                   const topColor = severityColors(topSim);
                   return (
-                    <div key={`rej-sec-${secKey}`} className="rounded-xl border border-slate-200 p-3">
-                      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                        <span className="font-semibold text-slate-800">Section {secIndex}</span>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5">
+                    <div key={`rej-sec-${secKey}`} className={`rounded-xl border ${topColor.border} ${topColor.bg} p-3`}>
+                      {/* Section header */}
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-sm text-slate-800">Section {secIndex}</span>
+                        <span className="rounded-md bg-white/70 border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
                           {matches.length} match{matches.length > 1 ? "es" : ""}
                         </span>
-                        {topSim > 0 ? (
-                          <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${topColor.badge}`}>
-                            {topColor.label} overlap
-                          </span>
-                        ) : null}
+                        {/* Prominent similarity percentage */}
+                        <span className={`ml-auto rounded-full px-3 py-0.5 text-sm font-bold ring-1 ${topColor.badge}`}>
+                          {(topSim * 100).toFixed(1)}% similarity
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${topColor.badge}`}>
+                          {topColor.label} overlap
+                        </span>
                       </div>
+                      {/* Similarity progress bar */}
+                      <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/60">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            topSim >= 0.8 ? "bg-red-500" : topSim >= 0.5 ? "bg-amber-400" : "bg-yellow-400"
+                          }`}
+                          style={{ width: `${(topSim * 100).toFixed(1)}%` }}
+                        />
+                      </div>
+                      {/* Side-by-side content */}
                       <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                            Uploaded Document
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            ✦ Your Section
                           </p>
                           <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                             {matches[0]?.yourText || "(No uploaded text provided)"}
@@ -1571,26 +1642,36 @@ export default function Home() {
                           {matches.map((m, i) => {
                             const severity = severityColors(m.similarity || 0);
                             return (
-                              <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} ${severity.bg} p-3`}>
-                                <div className="mb-1.5">
-                                  <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                              <div key={`rej-${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} bg-white/80 p-3`}>
+                                {/* Source attribution */}
+                                <div className="mb-2 rounded-md bg-slate-100/80 px-2 py-1.5">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
+                                  <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
                                     {m.matchedTitle || m.matchedDocument || "Unknown"}
                                   </p>
                                   {m.matchedAuthors ? (
-                                    <p className="truncate text-[10px] text-slate-500">
-                                      <span className="text-slate-400">Author:</span> {m.matchedAuthors}
-                                    </p>
+                                    <p className="truncate text-[10px] text-slate-500">by {m.matchedAuthors}</p>
                                   ) : null}
                                 </div>
-                                <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px]">
-                                  <span className={`font-semibold ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
+                                {/* Score breakdown */}
+                                <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px]">
+                                  <span className={`font-bold text-sm ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
                                     {((m.similarity || 0) * 100).toFixed(1)}%
                                   </span>
-                                  <span className="text-slate-500">match</span>
+                                  <span className="text-slate-500">hybrid match</span>
                                   <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
                                     {severity.label}
                                   </span>
+                                  {m.embeddingSimilarity != null ? (
+                                    <span className="ml-auto text-slate-400">
+                                      emb {((m.embeddingSimilarity || 0) * 100).toFixed(0)}%
+                                      {m.coverageSimilarity != null && m.coverageSimilarity > 0
+                                        ? ` · phrase ${((m.coverageSimilarity || 0) * 100).toFixed(0)}%`
+                                        : ""}
+                                    </span>
+                                  ) : null}
                                 </div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Database Section</p>
                                 <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                                   {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || "", 3) : "(No DB text)"}
                                 </p>
@@ -1605,6 +1686,9 @@ export default function Home() {
               </div>
             </details>
           ) : null}
+
+
+
         </section>
       ) : error ? (
         <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
@@ -1903,6 +1987,11 @@ export default function Home() {
             <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${isVerified ? "bg-emerald-100 text-emerald-700 ring-emerald-300" : "bg-rose-100 text-rose-700 ring-rose-300"}`}>
               {isVerified ? "Accepted" : "Rejected"}
             </span>
+            {totalTimeSeconds !== null ? (
+              <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-mono font-semibold text-slate-600 ring-1 ring-slate-300">
+                ✓ Completed in {formatElapsed(totalTimeSeconds)}
+              </span>
+            ) : null}
           </div>
           <p className="mt-2 text-sm text-slate-600">{resultMessage}</p>
 
@@ -1915,11 +2004,12 @@ export default function Home() {
                 </span>
               </div>
 
+              {/* Primary metric: section coverage */}
               <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <p className="text-3xl font-bold text-emerald-700">{authorship.originalPercentage}%</p>
                 <span className="text-sm text-slate-600">original content</span>
                 <span className="text-xs text-slate-500">
-                  · {authorship.matchedPercentage}% matched with database
+                  · {authorship.matchedPercentage}% of sections matched database
                 </span>
               </div>
 
@@ -1929,6 +2019,20 @@ export default function Home() {
                   style={{ width: `${authorship.originalPercentage}%` }}
                 />
               </div>
+
+              {/* Secondary metric: weighted semantic overlap */}
+              {authorship.weightedSemanticOverlap !== undefined ? (
+                <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400">Weighted Semantic Overlap</span>
+                    <span className="text-lg font-bold text-amber-600">{authorship.weightedSemanticOverlap}%</span>
+                  </div>
+                  <p className="flex-1 text-[11px] leading-relaxed text-slate-500">
+                    Dedup-corrected score: how much of your document's content semantically overlaps with the database,
+                    weighted by similarity strength. Duplicate passages counted only once.
+                  </p>
+                </div>
+              ) : null}
 
               {successSimilarity && mapSectionCount > 0 ? (
                 <div className="mt-4">
@@ -2057,22 +2161,35 @@ export default function Home() {
                   const topSim = matches.reduce((max, m) => Math.max(max, m.similarity || 0), 0);
                   const topColor = severityColors(topSim);
                   return (
-                    <div key={`success-sec-${secKey}`} className="rounded-xl border border-slate-200 p-3">
-                      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                        <span className="font-semibold text-slate-800">Section {secIndex}</span>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5">
+                    <div key={`success-sec-${secKey}`} className={`rounded-xl border ${topColor.border} ${topColor.bg} p-3`}>
+                      {/* Section header */}
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-sm text-slate-800">Section {secIndex}</span>
+                        <span className="rounded-md bg-white/70 border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
                           {matches.length} match{matches.length > 1 ? "es" : ""}
                         </span>
-                        {topSim > 0 ? (
-                          <span className={`rounded-full px-2 py-0.5 font-medium ring-1 ${topColor.badge}`}>
-                            {topColor.label} overlap
-                          </span>
-                        ) : null}
+                        {/* Prominent similarity percentage */}
+                        <span className={`ml-auto rounded-full px-3 py-0.5 text-sm font-bold ring-1 ${topColor.badge}`}>
+                          {(topSim * 100).toFixed(1)}% similarity
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${topColor.badge}`}>
+                          {topColor.label} overlap
+                        </span>
                       </div>
+                      {/* Similarity progress bar */}
+                      <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-white/60">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            topSim >= 0.8 ? "bg-red-500" : topSim >= 0.5 ? "bg-amber-400" : "bg-yellow-400"
+                          }`}
+                          style={{ width: `${(topSim * 100).toFixed(1)}%` }}
+                        />
+                      </div>
+                      {/* Side-by-side content */}
                       <div className="grid gap-3 md:grid-cols-2">
-                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
-                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                            Uploaded Document
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            ✦ Your Section
                           </p>
                           <p className="max-h-36 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                             {matches[0]?.yourText || "(No uploaded text provided)"}
@@ -2082,26 +2199,36 @@ export default function Home() {
                           {matches.map((m, i) => {
                             const severity = severityColors(m.similarity || 0);
                             return (
-                              <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} ${severity.bg} p-3`}>
-                                <div className="mb-1.5">
-                                  <p className="line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
+                              <div key={`${secKey}-m-${i}`} className={`rounded-lg border ${severity.border} bg-white/80 p-3`}>
+                                {/* Source attribution */}
+                                <div className="mb-2 rounded-md bg-slate-100/80 px-2 py-1.5">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Source</p>
+                                  <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-slate-800" title={m.matchedTitle || m.matchedDocument}>
                                     {m.matchedTitle || m.matchedDocument || "Unknown"}
                                   </p>
                                   {m.matchedAuthors ? (
-                                    <p className="truncate text-[10px] text-slate-500">
-                                      <span className="text-slate-400">Author:</span> {m.matchedAuthors}
-                                    </p>
+                                    <p className="truncate text-[10px] text-slate-500">by {m.matchedAuthors}</p>
                                   ) : null}
                                 </div>
-                                <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px]">
-                                  <span className={`font-semibold ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
+                                {/* Score breakdown */}
+                                <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px]">
+                                  <span className={`font-bold text-sm ${severity.badge.split(" ").slice(0, 2).join(" ")}`}>
                                     {((m.similarity || 0) * 100).toFixed(1)}%
                                   </span>
-                                  <span className="text-slate-500">match</span>
+                                  <span className="text-slate-500">hybrid match</span>
                                   <span className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ${severity.badge}`}>
                                     {severity.label}
                                   </span>
+                                  {m.embeddingSimilarity != null ? (
+                                    <span className="ml-auto text-slate-400">
+                                      emb {((m.embeddingSimilarity || 0) * 100).toFixed(0)}%
+                                      {m.coverageSimilarity != null && m.coverageSimilarity > 0
+                                        ? ` · phrase ${((m.coverageSimilarity || 0) * 100).toFixed(0)}%`
+                                        : ""}
+                                    </span>
+                                  ) : null}
                                 </div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Database Section</p>
                                 <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
                                   {m.matchedText ? highlightOverlap(m.matchedText, matches[0]?.yourText || "", 3) : "(No DB text)"}
                                 </p>
@@ -2116,6 +2243,7 @@ export default function Home() {
               </div>
             </details>
           ) : null}
+
         </section>
       ) : null}
     </main>

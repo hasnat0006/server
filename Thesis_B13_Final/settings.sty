@@ -1,0 +1,259 @@
+% You should not change anything in this file unless you really know
+% what you are doing.
+\RequirePackage{graphicx}
+% \RequirePackage{algorithmic}
+% \RequirePackage{algorithm}
+\RequirePackage{amsthm}
+\RequirePackage[a4paper,left=1.0in,right=0.9in,top=0.9in,bottom=0.9in]{geometry}
+% \RequirePackage[english]{babel}
+% \RequirePackage[utf8]{inputenc}
+\RequirePackage{times}
+\RequirePackage{cite}
+\RequirePackage{url}
+\RequirePackage{listings}
+\RequirePackage[final, colorlinks, linkcolor=black, citecolor=black, urlcolor=black]{hyperref}
+\setcounter{secnumdepth}{5}
+% section and subsection font size
+\RequirePackage{sectsty}
+\sectionfont{\large}		
+\subsectionfont{\normalsize}
+\RequirePackage{fancyhdr}
+% sets spacing between paragraphs
+\parskip 7.2pt
+% \parskip 5pt           
+\RequirePackage{listings}
+\RequirePackage{xcolor}
+\RequirePackage{inconsolata}
+
+% 1.5 spacin
+\RequirePackage{setspace}
+\onehalfspacing
+\definecolor{codebg}{rgb}{0.95,0.95,0.92}
+
+
+% sets leading space for paragraphs
+\parindent 0.0pt	
+
+% Read and store student names in DB
+\RequirePackage{datatool}
+\DTLloaddb[noheader]{ThesisStudents}{parameters/students.txt}
+
+
+% Customized chapter headings
+\def\@makechapterhead#1{%
+  {\parindent \z@ \centering \normalfont
+    \ifnum \c@secnumdepth >\m@ne
+    \Large\bfseries \MakeUppercase{\@chapapp}\space \thechapter
+    \par\nobreak
+    \vskip -10\p@
+    \fi
+    \interlinepenalty\@M
+    \Large \bfseries \MakeUppercase{#1}\par\nobreak
+    \vskip 90\p@}}
+
+\lstdefinelanguage{SQL}{
+    keywords={
+        CREATE, TABLE, PRIMARY, KEY, NOT, NULL,
+        UNIQUE, CONSTRAINT, FOREIGN, REFERENCES,
+        ON, DELETE, CASCADE, DEFAULT, INDEX,
+        USING, ALTER, ADD
+    },
+    sensitive=false,
+    comment=[l]{--},
+    morestring=[b]"
+}
+
+\lstset{
+    language=SQL,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape,
+    breaklines=true,
+    backgroundcolor=\color{codebg},
+    columns=fullflexible,
+    showstringspaces=false,
+    tabsize=2
+}
+
+
+% Thesis parameters
+\def\thesistitle{\input{parameters/thesistitle.txt}\unskip}
+\def\supdel{\par}
+\def\supervisor{\input{parameters/supervisor.txt}\unskip}
+\def\thesisdate{\input{parameters/thesisdate.txt}\unskip}
+\def\thesisstudent{\input{parameters/students.txt}\unskip}
+
+
+
+% Thesis TopCover page 
+\def\thesistopcoverpage{
+  \thispagestyle{empty}
+  \begin{center}
+    {\Large\thesistitle}\\
+    \vspace{50mm}
+    \large ZINIA SULTANA\\
+    \vspace{25mm}
+    \large {M.Sc. Engineering Thesis}
+    \vspace*{10mm}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.2\linewidth]{figures/mistlogo.png}
+    \end{figure}
+
+    \large {DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING\\
+    MILITARY INSTITUTE OF SCIENCE AND TECHNOLOGY\\
+    DHAKA, BANGLADESH}\\
+
+    \vspace{30mm}
+    \large{\thesisdate}
+  \end{center}
+  
+}
+
+
+
+
+% Thesis title page 
+\def\thesistitlepage{
+  \thispagestyle{empty}
+  \begin{center}
+    {\Large\thesistitle}\\
+    \vspace{50mm}
+    \DTLforeach{ThesisStudents}{\name=Column1,\id=Column2}
+    {
+        \large{\name\ (SN. \id)}\\
+    }
+    \vspace{25mm}
+    \large {A Thesis Submitted in Partial Fulfillment of the Requirements for the Degree of Bachelor of Science in Computer Science and Engineering}
+    \vspace*{10mm}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.2\linewidth]{figures/mistlogo.png}
+    \end{figure}
+
+    \large {DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING\\
+    MILITARY INSTITUTE OF SCIENCE AND TECHNOLOGY\\
+    DHAKA, BANGLADESH}\\
+
+    \vspace{30mm}
+    \large{\thesisdate}
+  \end{center}
+  
+}
+
+% Thesis Approovals page 
+\def\thesisapprovalpage{
+    \thispagestyle{empty}
+    \begin{center}
+        {\Large\thesistitle}\\
+        \vspace{4mm}
+        \normalsize {B.Sc. Engineering Thesis}\\
+        \vspace{3mm}
+        \normalsize {By}\\
+        \vspace{3mm}
+        \DTLforeach{ThesisStudents}{\name=Column1,\id=Column2}
+        {
+            \large{\name\ (SN. \id)}\\
+        }
+        \vspace{5mm}
+        \normalsize Approved as to style and content by the Board of Examination on 08 June 2026:\\
+        \vspace{10mm}
+    \end{center}
+    
+    \justifying
+    \hspace{5mm}\rule{7cm}{0.4pt}\\
+    \hspace*{4.5mm} Zinia Sultana \hspace{83mm} Supervisor\\
+    \hspace*{4.5mm} Lecturer\\
+    \hspace*{4.5mm} Dept of Computer Science and Engineering\\
+    \hspace*{4.5mm} MIST, Dhaka\\
+
+
+    \hspace{5mm}\rule{7cm}{0.4pt}\\
+    \hspace*{4.5mm} Brig. Gen. Mohammad Shahjahan Majib \hspace{35mm} Head of the Department\\
+    \hspace*{4.5mm} Dept of Computer Science and Engineering\\
+    \hspace*{4.5mm} MIST, Dhaka\\
+
+    \vfill
+    \centering{Department of Computer Science and Engineering, MIST, Dhaka.}
+    
+}
+
+
+% Thesis declaration
+\def\thesisdeclaration{
+  \thispagestyle{empty}
+  \begingroup
+  \begin{center}
+  \Large \thesistitle \\
+  \vspace{20mm}
+  \Large DECLARATION
+  \end{center}
+  % \addcontentsline{toc}{chapter}{DECLARATION}
+  \vspace{8mm}
+  \justifying{
+    We hereby declare that the study reported in this thesis entitled as above is our own original work and has not been submitted before anywhere for any degree or other purposes. Further, we certify that the intellectual content of this thesis is the product of our own work and that all the assistance received in preparing this thesis and sources have been acknowledged and cited in the reference Section.\\
+    }
+\begin{flushleft}
+  \DTLforeach{ThesisStudents}{\StudentName=Column1,\StudentID=Column2,\Date=Column3}{
+    \vspace*{20.0mm}
+    \begin{minipage}[t]{0.4\textwidth}
+      \hrule\medskip
+       \begin{flushleft} 
+      \StudentName\par
+      \StudentID\par
+      \Date
+       \end{flushleft}
+    \end{minipage}\par}
+  \end{flushleft}
+  \vspace*{\stretch{1}}
+\vfill
+\centering{Department of Computer Science and Engineering, MIST, Dhaka.}
+
+}
+
+
+
+\def\listsandtoc{
+  
+ % Table of contents
+  \renewcommand\contentsname{\begin{center}\vskip-40.0mm{\Large TABLE OF CONTENTS}\end{center}}
+  \addcontentsline{toc}{chapter}{\textbf{\normalsize{TABLE OF CONTENTS}}}
+  \tableofcontents
+  \clearpage
+  
+
+  % List of figures
+  \phantomsection
+  \renewcommand\listfigurename{\begin{center}\vskip-4cm{\Large LIST OF FIGURES}\end{center}} 
+  \addcontentsline{toc}{chapter}{\textbf{\normalsize{LIST OF FIGURES}}}
+  \listoffigures
+  \clearpage
+  
+
+ % List of tables
+ \phantomsection
+  \renewcommand\listtablename{\begin{center}\vskip-4cm{\Large LIST OF TABLES}\end{center}} 
+  \addcontentsline{toc}{chapter}{\textbf{\normalsize{LIST OF TABLES}}}
+  \listoftables
+  \clearpage
+
+  % List of algorithms
+  \phantomsection
+  \renewcommand\listalgorithmname{\begin{center}\vskip-4cm{\Large LIST OF ALGORITHMS}\end{center}}
+  \addcontentsline{toc}{chapter}{\textbf{\normalsize{LIST OF ALGORITHMS}}}
+  \begingroup
+    \let\oldnumberline\numberline
+    \renewcommand{\numberline}{Algorithm~\oldnumberline}
+    \renewcommand{\@dotsep}{140}
+    \listofalgorithms
+  \endgroup
+  
+  \clearpage
+  
+  % List of coding segments
+  % \renewcommand\lstlistlistingname{\begin{center}{\Large LIST OF CODE SEGMENTS}\end{center}} 
+  % \lstlistoflistings
+  % \addcontentsline{toc}{chapter}{\textbf{\normalsize{LIST OF CODE SEGMENTS}}}
+}
+
+\endinput

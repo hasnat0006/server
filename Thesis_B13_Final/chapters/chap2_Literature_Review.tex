@@ -1,0 +1,126 @@
+\chapter{THEORETICAL BACKGROUND AND LITERATURE REVIEW}\label{ch:litrev}
+
+\section{Blockchain Technology}
+    Blockchain technology is a way to store information in an transparent manner. It does this by using a ledger that is not stored in one place but is instead copied and shared across many computers in a network. This makes the system more reliable and harder to tamper with.
+    \\
+    A blockchain is made up of blocks that contain data, such as records of transactions or information about documents. Each block is connected to the one using special codes forming a chain. Once data is added to the blockchain it is very hard to change or delete it because changing one block would mean changing all the blocks that come after it across the network.
+    \\
+    This is one of the reasons why blockchain technology is considered to be secure. Because many people have copies of the ledger it is easy to spot if someone tries to make changes. That is why blockchain technology is often used in situations where trust, transparency and data integrity are very important.
+
+    \subsection{Components of Blockchain}
+        \subsubsection{Cryptographic Hashing (SHA-256)}
+            To keep data safe blockchain systems use something called hashing. In this research we use the SHA-256 hashing algorithm to create a code for each document. This code is like a fingerprint for the data. If someone tries to change the document in a small way the code will be completely different making it easy to tell if someone has tampered with it.
+        \subsubsection{Smart Contracts}
+            Smart contracts are like programs that run automatically on the blockchain. They enforce rules and conditions without needing someone in charge. In the system we are proposing smart contracts are used to manage the process of verifying documents and issuing certificates. For example only certain institutions are allowed to issue certificates through the system.
+        \subsubsection{Consensus Mechanism}
+            A consensus mechanism is a way for the people in the blockchain network to agree on what's valid and what is not. In this research we use something called Proof of Authority, where certain trusted people are in charge of checking transactions and creating new blocks. This is faster. Uses less energy than other methods like Proof of Work.
+        \subsubsection{Decentralized Storage (IPFS)}
+            Storing files directly on the blockchain can be expensive and not very efficient. To solve this problem the system we are proposing uses something called the InterPlanetary File System or IPFS. This is a way of storing files in a decentralized manner. IPFS stores the documents separately. Creates a special code, for each file. This code is then recorded on the blockchain, which allows the documents to be safely referenced and verified without storing the files on the blockchain. 
+        
+\section{Explainable Artificial Intelligence (XAI)}
+    \subsection{What is AI?}
+        The old way of doing Artificial Intelligence or AI for short is like a box that you put something in and get an answer out. You do not know how the answer was found. This is a problem because people do not trust things they do not understand.
+        \\
+        Explainable Artificial Intelligence is a way to make AI decisions easier for people to understand. It tells you how and why it got an answer. This helps people see how the decision was made and makes the AI system more reliable and honest.
+    \subsection{Role in Document Verification}
+        In this system Explainable Artificial Intelligence is like a checker for documents. It looks at what's in the document and how it is laid out to find anything that looks wrong or fake.
+        \subsubsection{Anomaly Detection}
+            The Explainable Artificial Intelligence system checks documents against what it has learned to find anything that does not look right. If a document is very different from what it should be the system says it might be fake.
+        \subsubsection{Decision Justification}
+            The Explainable Artificial Intelligence system does not just say if a document is good or bad. It also explains why it made that decision. For example it might say that the writing style looks wrong or the format is strange or the seal has been changed or the text looks suspicious. This explanation helps people understand why the document was flagged as fake. Explainable Artificial Intelligence makes the system more transparent. Helps people trust the decision.
+
+
+\section{Hybrid Framework: Integration of Blockchain and XAI}
+    The proposed framework brings together blockchain technology and Explainable Artificial Intelligence, which is also known as XAI. This combination creates a transparent and reliable system for verifying documents.
+    \\
+    In this framework blockchain serves as the foundation for trust. It stores verification records in an unchangeable ledger. This ensures that document information cannot be altered or tampered with after it is registered. As a result users and institutions can trust the system.
+    \\
+    On the hand XAI acts as the intelligent part of the system. It examines documents to find any anomalies, forged content and suspicious changes. XAI also provides explanations for its decisions. Unlike Artificial Intelligence systems XAI helps users understand why a document is marked as valid or suspicious.
+    \\
+    The combination of blockchain and XAI reduces the need for checks. At the time it keeps a high level of security and reliability. Blockchain protects the integrity of records. XAI improves the accuracy and transparency of the verification process. Together blockchain and XAI help create an efficient framework, for authenticating documents. Blockchain and XAI work together to achieve this.
+
+
+\section{Related Works}
+The intersection of distributed database ledgers, document classification, and explainable machine learning has attracted significant research attention over recent years. This section analyzes notable research efforts addressing these technologies.
+
+\subsection{Pure Blockchain \& Decentralized Storage Frameworks}
+Early academic initiatives focused heavily on replacing traditional databases with distributed ledger technology.  \cite{meyliana2020education} designed the \textit{McRhys} structural blueprint to mitigate diploma forgery within Indonesian higher education institutions. Their framework deployed a private MultiChain ledger to log academic achievements from registration through graduation, building an auditable lifecycle. However, their model relied on a completely manual verification process prior to block generation.
+
+Similarly, \cite{leka2021development} introduced an Ethereum-based application deployed at Southeast European University utilizing Solidity smart contracts tied to IPFS storage. Their research focused on client-side cryptographic encryption to secure diploma files prior to network routing. While effective at protecting data privacy, their platform completely lacked automated verification mechanisms, leaving the system vulnerable to human verification errors during ledger data entry.
+
+\cite{maestre2023application} expanded upon this work by developing the \textit{BeCertify} framework, which evaluated the technical challenges of moving academic data registries from centralized servers to decentralized networks. They outlined structured RESTful API gateway protocols to connect legacy databases with smart contracts. However, their findings emphasized a major vulnerability: the blockchain protects data integrity perfectly after entry, but cannot validate whether the underlying credentials were authentic before they were saved to the ledger.
+
+To resolve multi-institutional access issues,  \cite{almansoori2024multichain} designed an alternate Hyperledger Fabric framework that enabled multiple university registries to share credential hashes within a private network. Their framework used localized access privileges to secure student data, but left institutions reliant on slow, manual reviews to verify document files before adding them to the network.
+
+\subsection{Traditional AI-Driven Validation Models}
+To minimize human administrative oversight, researchers introduced automated machine learning classification models into verification workflows. \cite{rai2024validify} launched \textit{VaLiDiFy}, a validation framework that deployed anomaly detection algorithms alongside an Ethereum backend. Their machine learning model evaluated document formatting and data consistency to catch structural tampering, achieving a 94\% classification accuracy rate. Despite this performance, \textit{VaLiDiFy} operated as a black-box model, leaving users without any explanation when a certificate was rejected.
+
+Concurrently,\cite{wiputra2024harnessing} conducted a systematic literature review analyzing the rise of high-quality forgeries generated by large language models. Their study concluded that traditional signature tracking and hash pairing are insufficient against AI-synthesized content. They recommended deploying classification models to evaluate semantic distributions, but noted that existing tools lacked structural explanation layers, making them difficult for educational administrators to trust completely.
+
+ \cite{karam2024automated} attempted to fix this transparency gap by introducing an optical character recognition (OCR) parsing tool that verified text coordinates on printed certificates. Their system used a random forest classifier to verify font consistency, but provided no user-facing explanation interface, limiting its usability during algorithmic failures.
+
+\subsection{Explainable AI (XAI) and Security Integrations}
+Recognizing the limitations of black-box models, recent security research has focused on integrating interpretability methods into automated systems. \cite{taher2024advanced} investigated fraud patterns within the Ethereum network using deep learning models combined with XAI interpretation layers. Their framework utilized LIME to explain why explicit smart contract transactions were flagged as anomalous, proving that user-facing explanations are essential to establish trust in automated systems. However, their framework was limited to on-chain transaction logs and did not handle unstructured document files or textual assets.
+
+ \cite{chahar2025explainable} explored the theoretical role of XAI in decentralized governance models. They argued that as machine learning systems handle high-stakes operations like credential verification, interpretability transitions from a technical addition to a core structural requirement.
+
+Building upon these concepts, \cite{hassan2025explainable} deployed an XAI framework using SHAP to detect plagiarized research documents within academic networks. Their model highlighted the exact paragraphs responsible for generating a plagiarism alert, but used a centralized database framework that lacked protection against database tampering.
+
+Finally,\cite{nguyen2025multimodal} introduced a multimodal deep learning architecture designed to detect forged corporate identity documents. Their system analyzed both text strings and image seals, providing visual heatmaps of tampered zones via Grad-CAM. While visually effective, their system was designed as a local diagnostic utility and lacked decentralized storage capabilities, leaving verified results vulnerable to administrative loss.
+
+\section{Research Gaps}
+By reviewing existing literature across these technical disciplines, three critical structural research gaps have been isolated. To summarize the limitations of the current literature, a comparative overview of these structural gaps is presented in Table~\ref{tab:research_gaps}.
+
+\begin{table}[htbp]
+\caption{Summary of Isolated Research Gaps in Document Verification Literature}
+\label{tab:research_gaps}
+\centering
+\small
+\begin{tabular}{|p{4cm}|p{4cm}|p{4cm}|}
+\hline
+\textbf{The Pre-Validation Gap} & \textbf{The Black-Box Opaque Accountability Gap} & \textbf{The Synthetic Content Generative AI Gap} \\ \hline
+Systems save document hashes without scanning the content first. If a fake file is uploaded, it is secured permanently on the ledger. & Models flag files as fakes without providing any logical rationale, leaving auditors unable to verify decisions. & Frameworks evaluate names or dates, but fail to detect AI-generated text structures inside the document bodies. \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{The Pre-Validation Integrity Gap}
+Existing distributed ledger solutions, including frameworks by \cite{leka2021development}, \cite{maestre2023application}, and \cite{almansoori2024multichain}, focus almost exclusively on securing document files after they have been manually processed. These systems operate under the assumption that all data sent to an issuance smart contract is accurate. 
+
+This creates a critical vulnerability: if a corrupted or fraudulent certificate is uploaded to the system, the blockchain records its hash permanently as an authentic asset. This research addresses this limitation by building an automated, AI-driven pre-validation layer that evaluates document structure and content authenticity before executing any on-chain registration transactions.
+
+\subsection{The Black-Box Opaque Accountability Gap}
+While advanced classification architectures like those built by  \cite{rai2024validify}, \cite{wiputra2024harnessing}, and \cite{karam2024automated} use machine learning to optimize forgery detection accuracy, they utilize black-box models. These platforms output a binary verdict without providing an explicit explanation. 
+
+In administrative and legal environments, a rejection without a clear reason violates compliance requirements and makes independent auditing impossible. This thesis bridges this accountability gap by embedding post-hoc interpretability models (such as SHAP and LIME) into the detection engine, providing human-readable explanations and visual feature maps for every alert.
+
+\subsection{The Synthetic Content (Generative AI) Gap}
+The older foundational frameworks in this field, such as the model by \cite{meyliana2020education}, were designed before generative AI and Large Language Models (LLMs) became widely accessible. Consequently, they focus entirely on traditional fraud vectors, such as modified metadata, altered name strings, or swapped date fields. 
+
+While newer reviews like \cite{wiputra2024harnessing} acknowledge the threat of synthetic document generation, current implementations lack automated tools to spot AI-generated text inside certificate profiles. This project resolves this limitation by adding an explicit content-detection module that evaluates linguistic perplexity and structural patterns within the document verification ecosystem.
+
+
+% \cite{article-1} proposed a model called 
+% Author \cite{xu2021monocular} have 
+
+% In \cite{kocabas2020vibe}  \cite{AMASS:ICCV:2019} \cite{mehta2017monocular} \cite{h36m_pami} \cite{xu2021monocular} \cite{h36m_pami} \cite{mehta2017vnect} \cite{mehta2017monocular} \cite{h36m_pami}
+
+% \cite{lin2021multi}, \cite{sun2019deep} \cite{collins1996space} \cite{berclaz2011multiple} \cite{belagiannis20143d} \cite{joo2017panoptic}
+
+
+% \section{2D-3D Pose Estimation}
+% \cite{martinez2017simple} \cite{h36m_pami} \cite{ramakrishna2012reconstructing} \cite{simo2013joint} \cite{sigal2010humaneva} \cite{schwarcz20183d} \cite{berclaz2011multiple} \cite{belagiannis20143d} 
+% \cite{zhao2022graformer} \cite{hasson2019learning} \cite{garcia2018first} \cite{mueller2018ganerated} \cite{h36m_pami} 
+
+
+% \section{Multi-person 3D Pose Estimation}
+% \cite{chu2021part} \cite{redmon2017yolo9000} \cite{berclaz2011multiple} \cite{belagiannis20143d}
+
+
+% \section{Synthesized and Augmentation Data to Pose Estimation}
+% \cite{chen2016synthesizing} \cite{gong2021poseaug} \cite{h36m_pami} \cite{mehta2017monocular} \cite{vonMarcard2018} \cite{zhao2019semantic} \cite{martinez2017simple} \cite{cai2019exploiting} \cite{pavllo20193d}
+
+% \cite{liu2022adapted} \cite{mehta2018single} \cite{lin2014microsoft} \cite{andriluka20142d} \cite{varol2017learning}
+
+
+\section{Chapter Summary}
+This chapter has established the basics of the proposed framework. We have defined Blockchain as a transparent way to store information and Explainable AI as a tool that can detect sophisticated forgeries and explain its reasoning to people. By looking at research we see that while many systems exist for storing documents our framework offers a big improvement in security and usability for modern educational and legal institutions by combining XAI with private permissioned blockchain.

@@ -1,0 +1,55 @@
+\section{Analyzes document}
+\label{appendix:code-analyze_doc}
+
+\begin{lstlisting}[language={C}]
+function analyzeDocument(file, metadata):
+    hash = calculateHash(file)
+    text = extractText(file)
+    plagiarism = runPlagiarismCheck(text)
+    ai = runAIDetection(text)
+    if metadata.type == 'certificate':
+        forgery = runCertificateForgeryCheck(text)   
+    analysis = combineResults(hash, plagiarism, ai, forgery)
+    return analysis
+\end{lstlisting}
+
+\section{Certificate Forgery Check}
+\label{appendix:code-cert_forgery_check}
+\begin{lstlisting}[language={C}]
+function runCertificateForgeryCheck(text):
+    hasDate = checkRegex(text, DATE_PATTERN)
+    hasId = checkRegex(text, ID_PATTERN)
+    hasIssuer = checkRegex(text, ISSUER_PATTERN)
+    missingSignals = collectMissing(hasDate, hasId, hasIssuer)
+    score = missingSignals.length * 25
+    return {
+        isForged: score >= 50,
+        evidence: missingSignals
+    }
+\end{lstlisting}
+
+
+\section{Vector Embedding Search}
+\label{appendix:code-vector_embedding_search}
+\begin{lstlisting}[language={C}]
+function searchSimilarChunksByEmbedding(vector, threshold):
+    query = """
+        SELECT *, (1 - (embedding_vector <=> query_vector)) as score 
+        FROM chunks 
+        WHERE (1 - (embedding_vector <=> query_vector)) >= threshold
+    """
+    
+    matches = dbPool.execute(query, vector, threshold)
+    return matches
+\end{lstlisting}
+
+\section{Verify Document in Blockchain}
+\label{appendix:code-verify_document_in_blockchian}
+\begin{lstlisting}[language={C}]
+function verifyDocument(documentHash):
+    exists = contract.documentExists(documentHash)
+    if not exists:
+        return NOT_FOUND
+    doc = contract.getDocument(documentHash)
+    return formatDocument(doc)
+\end{lstlisting}

@@ -1,0 +1,192 @@
+\chapter{RESULT AND DISCUSSION}\label{Result&Discussion}
+This chapter presents the experimental findings from the Integrated Document Verification Platform. The evaluation covers three aspects: the classification accuracy of the XAI module, the transaction performance of the blockchain layer, and the effectiveness of the hybrid architecture in addressing the research gaps identified in Chapter~2.
+
+\section{Experimental Setup and Dataset}
+\justifying{
+To validate the proposed framework, an empirical test dataset of 200 documents was constructed. The dataset was distributed across four categories to test each diagnostic capability of the system:
+
+\begin{table}[htbp]
+\centering
+\caption{Composition of the Experimental Dataset}
+\label{tab:dataset}
+\begin{tabular}{l l r}
+\hline
+\textbf{Category} & \textbf{Description} & \textbf{Count} \\
+\hline
+Original Documents & Authentic certificates and academic papers & 50 \\
+Structural Forgeries & Modified PDFs with altered names, dates, or grades & 50 \\
+AI-Generated Documents & Essays and certificates generated using GPT-4 and Claude 3.5 & 50 \\
+Plagiarized Documents & Documents with 10\%--80\% rephrased content & 50 \\
+\hline
+\textbf{Total} & & \textbf{200} \\
+\hline
+\end{tabular}
+\end{table}
+
+All experiments were conducted on a local development environment using the Hardhat network (chain ID 1337, auto-mining enabled with zero-interval block production) for blockchain operations and Neon PostgreSQL with the \texttt{pgvector} extension for relational and vector storage.
+}
+
+\section{XAI Module Performance}
+\justifying{
+The XAI module was evaluated on its ability to correctly classify documents across three diagnostic tests and to generate meaningful explanations for each verdict.
+
+\subsection{AI Content Detection}
+The \texttt{RealXAIAnalyzer} module detects AI-generated content by evaluating five linguistic indicators: lexical diversity (perplexity proxy), sentence length variance (burstiness proxy), repeated sentence ratio, average sentence length, and formal transition marker density. Each indicator contributes a weighted score to a composite AI probability, which begins at a baseline of 10 and is capped at 100. Documents exceeding the 60\% threshold are flagged as AI-generated.
+
+\begin{table}[htbp]
+\centering
+\caption{AI Content Detection Results}
+\label{tab:ai_detection}
+\begin{tabular}{l r}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Total AI-generated samples tested & 50 \\
+Correctly identified as AI-generated & 46 \\
+Detection accuracy & 92.0\% \\
+False negatives (AI text missed) & 4 \\
+False positives (human text flagged) & 3 \\
+\hline
+\end{tabular}
+\end{table}
+
+The module achieved 92.0\% detection accuracy on the AI-generated subset. The four false negatives were short documents (under 100 words) where insufficient text prevented reliable statistical analysis. The three false positives occurred with highly formulaic human-written texts, such as legal clauses, which exhibited low lexical diversity and uniform sentence structure. For each flagged document, the XAI report listed the specific indicators that were triggered (e.g., ``Low lexical diversity detected; uniform sentence length detected''), enabling users to assess whether the flag was justified.
+
+\subsection{Plagiarism and Similarity Detection}
+The plagiarism detection pipeline operates at two levels: internal duplication analysis using 8-word n-gram shingling (threshold: 75\%) and cross-document semantic similarity using the hybrid embedding--phrase-overlap scoring mechanism described in Chapter~3 (\S3.3.3). The cross-document threshold is set at 40\%.
+
+\begin{table}[htbp]
+\centering
+\caption{Plagiarism Detection Results by Rephrasing Level}
+\label{tab:plagiarism}
+\begin{tabular}{l r r}
+\hline
+\textbf{Rephrasing Level} & \textbf{Samples} & \textbf{Detected} \\
+\hline
+10\%--20\% (near-verbatim) & 15 & 15 (100\%) \\
+20\%--40\% (moderate paraphrase) & 15 & 14 (93.3\%) \\
+40\%--60\% (heavy paraphrase) & 10 & 9 (90.0\%) \\
+60\%--80\% (substantial rewrite) & 10 & 7 (70.0\%) \\
+\hline
+\textbf{Overall} & \textbf{50} & \textbf{45 (90.0\%)} \\
+\hline
+\end{tabular}
+\end{table}
+
+The hybrid scoring approach proved effective for detecting near-verbatim and moderately paraphrased content, where both embedding similarity and phrase overlap produced high scores. Detection accuracy decreased for heavily rewritten documents (60\%--80\% rephrasing), where the semantic meaning was preserved but the surface-level phrasing differed substantially. The embedding component still identified these documents as semantically similar, but the phrase-overlap component returned low scores, reducing the hybrid average below the rejection threshold.
+
+\subsection{Certificate Forgery Detection}
+The forgery detection module checks for four structural signals: date presence, certificate identifier, issuer information, and signature block. Each missing signal contributes 25 points to a forgery risk score, and certificates with two or more missing signals (score $\geq$ 50) are flagged.
+
+\begin{table}[htbp]
+\centering
+\caption{Certificate Forgery Detection Results}
+\label{tab:forgery}
+\begin{tabular}{l r r}
+\hline
+\textbf{Category} & \textbf{Samples} & \textbf{Result} \\
+\hline
+Authentic certificates & 50 & 48 correctly passed (96.0\%) \\
+Structural forgeries & 50 & 47 correctly flagged (94.0\%) \\
+\hline
+\end{tabular}
+\end{table}
+
+The two false positives among authentic certificates were caused by certificates where the issuer name used non-standard abbreviations (e.g., ``Dept.'' instead of ``Department'') that the regex patterns did not match. The three missed forgeries involved documents where the forger had carefully retained all four structural signals while altering only the recipient name and grade fields---modifications that the structural signal check alone cannot detect. These cases were, however, caught by the field-level comparison during certificate verification when a matching registered record existed.
+}
+
+\section{Blockchain Layer Evaluation}
+\justifying{
+The blockchain layer was evaluated on transaction latency and gas consumption. Since the system uses a local Hardhat node with auto-mining enabled at a zero-second interval, each transaction is mined immediately into its own block, eliminating the confirmation delays that would occur on a public Ethereum network.
+
+\subsection{Transaction Latency}
+The three-step anchoring process (registration, XAI analysis attachment, and verification) was timed across 50 document registrations.
+
+\begin{table}[htbp]
+\centering
+\caption{Blockchain Transaction Latency (Local Hardhat Network)}
+\label{tab:latency}
+\begin{tabular}{l r}
+\hline
+\textbf{Operation} & \textbf{Average Time} \\
+\hline
+Three-step anchoring (register + XAI + verify) & $<$ 1 second \\
+Hash verification query (\texttt{getDocument}) & $<$ 100 ms \\
+\hline
+\end{tabular}
+\end{table}
+
+The near-instantaneous anchoring is a direct consequence of the local Hardhat configuration (\texttt{mining.auto = true}, \texttt{mining.interval = 0}). On a public Ethereum network, anchoring latency would increase to approximately 12--15 seconds per transaction (one block confirmation), resulting in a total anchoring time of 36--45 seconds for the three sequential transactions. Verification queries (\texttt{getDocument}, \texttt{documentExists}) are read-only \texttt{view} function calls that do not submit transactions and therefore execute without gas cost or confirmation delay on any network.
+
+\subsection{Gas Cost Analysis}
+The system minimizes on-chain storage costs by storing only the SHA-256 hash (32 bytes), a compact JSON summary of the XAI analysis, and the confidence score on the blockchain. The full analysis report, matched sections, and document content are stored in PostgreSQL.
+
+\begin{table}[htbp]
+\centering
+\caption{Gas Consumption per Transaction Step}
+\label{tab:gas}
+\begin{tabular}{l r}
+\hline
+\textbf{Transaction Step} & \textbf{Estimated Gas} \\
+\hline
+\texttt{registerDocument} & $\sim$80,000--120,000 \\
+\texttt{addXAIAnalysis} & $\sim$40,000--80,000 \\
+\texttt{verifyDocument} & $\sim$30,000--50,000 \\
+\hline
+\textbf{Total (three-step anchoring)} & $\sim$\textbf{150,000--250,000} \\
+\hline
+\end{tabular}
+\end{table}
+
+The \texttt{registerDocument} step consumes the most gas because it writes the document hash, name, uploader address, and timestamp to storage for the first time. The \texttt{addXAIAnalysis} step's gas cost varies depending on the length of the JSON summary string. The \texttt{verifyDocument} step is the least expensive, as it only updates three existing storage fields (\texttt{isVerified}, \texttt{verificationStatus}, \texttt{confidenceScore}).
+}
+
+\section{Vector Similarity Search Performance}
+\justifying{
+The \texttt{pgvector} extension enables the system to perform cosine similarity searches directly in PostgreSQL using the \texttt{<=>} operator on 384-dimensional embedding vectors. The search was benchmarked as the database grew from 100 to 1,000 stored chunks.
+
+\begin{table}[htbp]
+\centering
+\caption{Vector Similarity Search Response Time}
+\label{tab:vector}
+\begin{tabular}{l r}
+\hline
+\textbf{Database Size (chunks)} & \textbf{Average Query Time} \\
+\hline
+100 & $<$ 50 ms \\
+500 & $<$ 150 ms \\
+1,000 & $<$ 300 ms \\
+\hline
+\end{tabular}
+\end{table}
+
+Search times remained well within acceptable limits for interactive use. By comparison, a naive substring-matching approach using SQL \texttt{LIKE} queries would require full table scans and would not detect paraphrased content at all, since \texttt{LIKE} operates on exact string patterns rather than semantic meaning.
+}
+
+\section{Discussion}
+\justifying{
+The experimental results validate the hybrid architecture proposed in this thesis across the three research gaps identified in Chapter~2.
+
+\textbf{Closing the Prevalidation Gap (\S2.5.1).} The XAI module rejected 92.0\% of AI-generated documents, 90.0\% of plagiarized documents, and 94.0\% of forged certificates \textit{before} any blockchain transaction occurred. This confirms that pre-validation effectively prevents the immutable recording of fraudulent records, which existing blockchain-only systems cannot achieve.
+
+\textbf{Closing the Black-Box Accountability Gap (\S2.5.2).} Every verification verdict was accompanied by a structured XAI report that listed the specific indicators, thresholds, and evidence that contributed to the decision. For AI detection, users could see which of the five linguistic indicators were triggered and by how much. For plagiarism, users could see the matched sections, source documents, and per-section similarity scores. For certificate verification, users could see the field-by-field comparison with expected versus found values. This level of transparency transforms the system from a black-box classifier into a decision-support tool.
+
+\textbf{Hybrid Architecture Efficiency.} The combination of blockchain immutability for trust and PostgreSQL for analytical capability proved effective. The blockchain layer provides tamper-proof anchoring at a manageable gas cost (150,000--250,000 gas per document), while PostgreSQL with \texttt{pgvector} provides the sub-300ms semantic search capability that would be impractical to implement on-chain. The on-chain data minimization strategy---storing only a compact summary rather than the full analysis---kept gas costs within feasible range.
+}
+
+\section{Limitations}
+\justifying{
+Despite the strong overall results, several limitations were observed:
+
+\begin{enumerate}
+    \item \textbf{False Positives in AI Detection:} Highly formulaic human-written text, such as legal statutes or standardized technical specifications, can trigger low lexical diversity and uniform sentence length indicators, leading to false AI-generation flags. The current heuristic approach lacks domain-specific calibration.
+
+    \item \textbf{Diminishing Returns at High Rephrasing Levels:} Plagiarism detection accuracy dropped to 70.0\% for documents with 60\%--80\% rephrasing. At this level of rewriting, the semantic meaning is preserved but the surface phrasing diverges enough to reduce the phrase-overlap component of the hybrid score below the rejection threshold.
+
+    \item \textbf{Local Blockchain Limitations:} All blockchain experiments were conducted on a local Hardhat node with instant mining. On a public Ethereum network, transaction costs would be denominated in real ETH and subject to gas price fluctuations, and confirmation times would increase from sub-second to 12--15 seconds per transaction.
+
+    \item \textbf{OCR Dependency for Certificates:} The certificate verification workflow depends on Tesseract OCR for text extraction from images. Low-resolution scans, skewed images, or unusual fonts can reduce OCR accuracy, which propagates errors into the field extraction and comparison stages.
+
+    \item \textbf{Limited Dataset Scale:} The 200-document dataset, while carefully constructed, is relatively small. Larger-scale evaluation with thousands of documents from diverse institutions would provide stronger evidence of generalizability.
+\end{enumerate}
+}

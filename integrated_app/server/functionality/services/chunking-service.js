@@ -276,6 +276,26 @@ class ChunkingService {
   }
 
   /**
+   * Find top-K similar chunks by embedding score.
+   * Returns at most `topK` results sorted by embedding similarity descending.
+   * Use this to get a short-list before running expensive phrase-overlap.
+   */
+  async findTopKSimilarChunks(queryText, topK = 5, threshold = null) {
+    try {
+      const matches = await this.findSimilarChunks(queryText, null, threshold);
+      if (!matches || matches.length === 0) return [];
+      // Sort by embedding similarity descending and take top-K
+      return matches
+        .slice()
+        .sort((a, b) => (b.embeddingSimilarity || 0) - (a.embeddingSimilarity || 0))
+        .slice(0, topK);
+    } catch (error) {
+      console.error('❌ Error in findTopKSimilarChunks:', error);
+      return [];
+    }
+  }
+
+  /**
    * Find similar chunks using ONLY vector embeddings.
    */
   async findSimilarChunks(queryText, documentId = null, threshold = null) {

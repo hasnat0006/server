@@ -1,0 +1,43 @@
+\chapter{CONCLUSION AND FUTURE WORK}
+\justifying{
+This chapter summarizes the contributions and findings of the research, and outlines directions for future improvement.
+
+\section{Thesis Contributions}
+The objective of this research was to design and implement a document verification framework that combines decentralized immutability with explainable algorithmic analysis. The following contributions were achieved:
+
+\begin{enumerate}
+    \item \textbf{Hybrid Architectural Framework:} The thesis introduced a four-layer modular architecture that integrates a Node.js web orchestrator, a custom heuristic-based XAI analysis engine, an Ethereum-compatible blockchain layer (Solidity 0.8.24), and a PostgreSQL database with vector similarity search via the \texttt{pgvector} extension. This architecture ensures that every document undergoes content analysis before blockchain anchoring, addressing the prevalidation gap identified in the literature review (Chapter~2, \S2.5.1).
+
+    \item \textbf{Transparent Decision-Making:} The XAI module generates human-readable explanations for every verification verdict. AI content detection is performed through five concrete heuristic indicators---lexical diversity (perplexity proxy), sentence length variance (burstiness proxy), repeated sentence ratio, average sentence length, and formal transition marker density---each producing a scored, named indicator that is reported to the user. This directly addresses the black-box accountability gap (\S2.5.2) by ensuring that users understand not only the verdict but also the specific evidence behind it.
+
+    \item \textbf{Dual Verification Workflows:} The system supports two distinct verification pipelines. The large-document workflow handles research papers through plagiarism detection, AI content analysis, and blockchain anchoring. The certificate workflow employs OCR-based field extraction, canonical fingerprinting, multi-strategy record matching, and field-level comparison to produce verdicts such as Authentic, Tampered, Revoked, Suspicious, or Unknown.
+
+    \item \textbf{Hybrid Plagiarism Detection:} The plagiarism detection module combines 8-word n-gram shingling for internal duplication analysis with a two-stage cross-document similarity mechanism. The cross-document stage uses 384-dimensional transformer embeddings (Xenova/all-MiniLM-L6-v2) for semantic candidate retrieval, followed by lexical phrase-overlap analysis. The final hybrid score is computed as a 50/50 weighted average of embedding similarity and phrase overlap, enabling the system to detect both verbatim copying and paraphrased plagiarism.
+
+    \item \textbf{Decentralized Data Integrity:} SHA-256 cryptographic hashing and a three-step smart contract transaction sequence (registration, XAI analysis attachment, and verification) ensure that once a document is verified, its authenticity record becomes immutable and publicly auditable without relying on a centralized intermediary.
+\end{enumerate}
+
+\section{Conclusion}
+The proliferation of generative AI and sophisticated digital forgery has rendered traditional, centralized verification methods increasingly inadequate. This thesis demonstrates that a multi-layered approach---combining pre-validation content analysis with blockchain immutability and transparent explainability---can address the key weaknesses of existing systems.
+
+The integration of Explainable AI addresses the ethical and practical necessity for transparency in automated verification. By providing structured reports that disclose exactly which indicators, thresholds, and evidence contributed to each decision, the system enables human auditors to independently validate the output. This transparency transforms the verification process from an opaque classifier into a decision-support tool that can be trusted by students, universities, employers, and regulatory bodies.
+
+The on-chain data minimization strategy---storing only the SHA-256 hash, a compact XAI summary, and the confidence score on the blockchain while keeping the full analysis in PostgreSQL---balances the need for immutable trust with practical gas cost constraints.
+
+\section{Future Work}
+The following directions are identified for extending the current framework:
+
+\begin{enumerate}
+    \item \textbf{Multi-Modal Forgery Detection:} The current certificate forgery detection relies on text-based structural signals extracted via OCR. Future work could incorporate computer vision models, such as convolutional neural networks, for detecting visual forgery techniques including tampered seals, altered logos, and deepfake signatures that cannot be identified through text analysis alone.
+
+    \item \textbf{Zero-Knowledge Proofs (ZKPs):} Incorporating zero-knowledge proofs would enable users to demonstrate that a certificate is legitimate without exposing private information such as specific grades or identification numbers, addressing privacy concerns in cross-institutional verification.
+
+    \item \textbf{Cross-Chain Interoperability:} The current implementation targets a single Ethereum-compatible network. Extending the blockchain layer to support multiple chains (such as Polygon, Arbitrum, or Hyperledger Fabric) would improve portability, reduce gas costs on Layer-2 networks, and future-proof the system against ecosystem-specific risks.
+
+    \item \textbf{Mobile Integration:} Developing a mobile application with integrated OCR and camera-based document capture would allow instant field verification of physical certificates using only a smartphone.
+
+    \item \textbf{Standardization and Interoperability:} Aligning the system's output format with globally recognized standards such as the W3C Verifiable Credentials specification would enable cross-platform recognition of verification records and facilitate adoption by international institutions.
+
+    \item \textbf{Improved AI Detection:} The current heuristic-based AI detection approach could be augmented with fine-tuned transformer classifiers trained on domain-specific datasets, potentially improving accuracy for edge cases such as highly formulaic human-written texts that currently trigger false positives.
+\end{enumerate}
+}

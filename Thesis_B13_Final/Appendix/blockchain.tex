@@ -1,0 +1,208 @@
+\section{Hardhat Configuration}
+\label{appendix:hardhat_config}
+\begin{lstlisting}[language=javascript]
+// hardhat.config.js - Selected Configurations
+module.exports = {
+  solidity: {
+    version: "0.8.24",
+    settings: { optimizer: { enabled: true, runs: 200 } }
+  },
+  networks: {
+    hardhat: {
+      chainId: 1337,
+      mining: { auto: true, interval: 0 }
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 1337
+    }
+  }
+};
+
+\end{lstlisting}
+
+\section{DocumentRegistry Smart Contract}
+\label{appendix:smartcontract}
+
+\begin{lstlisting}[language={[Sharp]C}]
+pragma solidity ^0.8.24;
+
+contract DocumentRegistry {
+    struct Document {
+        bytes32 documentHash;
+        string documentName;
+        address uploader;
+        uint256 timestamp;
+        bool isVerified;
+        string xaiAnalysis;
+        string verificationStatus;
+        uint256 confidenceScore;
+    }
+
+    mapping(bytes32 => Document) public documents;
+    bytes32[] public documentHashes;
+
+    event DocumentRegistered(
+        bytes32 indexed documentHash,
+        string documentName,
+        address indexed uploader,
+        uint256 timestamp
+    );
+
+    event DocumentVerified(
+        bytes32 indexed documentHash,
+        bool isVerified,
+        string verificationStatus,
+        uint256 confidenceScore,
+        uint256 timestamp
+    );
+
+    event XAIAnalysisAdded(
+        bytes32 indexed documentHash,
+        string xaiAnalysis,
+        uint256 timestamp
+    );
+
+    function registerDocument(
+        bytes32 _documentHash,
+        string memory _documentName
+    ) public {
+        require(
+            documents[_documentHash].timestamp == 0,
+            "Document already registered"
+        );
+        require(
+            _documentHash != bytes32(0),
+            "Invalid document hash"
+        );
+        require(
+            bytes(_documentName).length > 0,
+            "Document name cannot be empty"
+        );
+        documents[_documentHash] = Document({
+            documentHash: _documentHash,
+            documentName: _documentName,
+            uploader: msg.sender,
+            timestamp: block.timestamp,
+            isVerified: false,
+            xaiAnalysis: "",
+            verificationStatus: "pending",
+            confidenceScore: 0
+        });
+        documentHashes.push(_documentHash);
+        emit DocumentRegistered(
+            _documentHash,
+            _documentName,
+            msg.sender,
+            block.timestamp
+        );
+    }
+    function addXAIAnalysis(
+        bytes32 _documentHash,
+        string memory _xaiAnalysis
+    ) public {
+        require(
+            documents[_documentHash].timestamp != 0,
+            "Document not found"
+        );
+        require(
+            bytes(_xaiAnalysis).length > 0,
+            "XAI analysis cannot be empty"
+        );
+        documents[_documentHash].xaiAnalysis = _xaiAnalysis;
+        emit XAIAnalysisAdded(
+            _documentHash,
+            _xaiAnalysis,
+            block.timestamp
+        );
+    }
+
+    function verifyDocument(
+        bytes32 _documentHash,
+        bool _isVerified,
+        string memory _verificationStatus,
+        uint256 _confidenceScore
+    ) public {
+        require(
+            documents[_documentHash].timestamp != 0,
+            "Document not found"
+        );
+        require(
+            _confidenceScore <= 100,
+            "Confidence score must be between 0 and 100"
+        );
+        require(
+            bytes(_verificationStatus).length > 0,
+            "Verification status cannot be empty"
+        );
+        documents[_documentHash].isVerified = _isVerified;
+        documents[_documentHash].verificationStatus = _verificationStatus;
+        documents[_documentHash].confidenceScore = _confidenceScore;
+        emit DocumentVerified(
+            _documentHash,
+            _isVerified,
+            _verificationStatus,
+            _confidenceScore,
+            block.timestamp
+        );
+    }
+    function getDocument(bytes32 _documentHash)
+        public
+        view
+        returns (bytes32, string memory, address, uint256, bool, string memory, 
+            string memory, uint256) {
+        require(
+            documents[_documentHash].timestamp != 0,
+            "Document not found"
+        );
+        Document memory doc = documents[_documentHash];
+        return (doc.documentHash,doc.documentName, doc.uploader, doc.timestamp,
+            doc.isVerified, doc.xaiAnalysis, doc.verificationStatus, doc.confidenceScore);
+    }
+
+    function documentExists(bytes32 _documentHash)
+        public
+        view
+        returns (bool){
+        return documents[_documentHash].timestamp != 0;
+    }
+    function getTotalDocuments()
+        public
+        view
+        returns (uint256){
+        return documentHashes.length;
+    }
+
+    function getDocumentHashByIndex(uint256 _index)
+        public
+        view
+        returns (bytes32)  {
+        require(
+            _index < documentHashes.length,
+            "Index out of bounds"
+        );
+
+        return documentHashes[_index];
+    }
+    function getVerificationStatus(bytes32 _documentHash)
+        public
+        view
+        returns (
+            bool,
+            string memory,
+            uint256
+        )
+    {
+        require(
+            documents[_documentHash].timestamp != 0,
+            "Document not found"
+        );
+        Document memory doc = documents[_documentHash];
+        return (
+            doc.isVerified,
+            doc.verificationStatus,
+            doc.confidenceScore
+        );
+    }
+}
+\end{lstlisting}
